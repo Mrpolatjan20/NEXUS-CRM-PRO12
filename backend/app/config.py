@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./nexus_crm.db"
     secret_key: str = "CHANGE_THIS_SECRET_KEY_BEFORE_DEPLOY"
     access_token_minutes: int = 60
+    admin_reset_key: str = ""
 
     model_config = SettingsConfigDict(
         env_file=".env",
