@@ -1,11 +1,18 @@
 
+import secrets
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import (
+    FastAPI,
+    Depends,
+    HTTPException,
+    Header,
+)
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 
+from .config import settings
 from .db import Base, engine, get_db
 from . import models, schemas
 from .security import (
@@ -42,7 +49,10 @@ def get_current_user(
     user = db.get(models.User, int(payload["sub"]))
 
     if not user or not user.is_active:
-        raise HTTPException(status_code=401, detail="Foydalanuvchi topilmadi")
+        raise HTTPException(
+            status_code=401,
+            detail="Foydalanuvchi topilmadi",
+        )
 
     return user
 
@@ -82,9 +92,12 @@ def health():
     return {"status": "ok"}
 
 
-# Birinchi administratorni faqat tizimda xodim bo'lmaganda yaratish
+# Birinchi administratorni yaratish
 @app.post("/auth/bootstrap-admin", response_model=schemas.UserOut)
-def bootstrap_admin(data: schemas.UserCreate, db: Session = Depends(get_db)):
+def bootstrap_admin(
+    data: schemas.UserCreate,
+    db: Session = Depends(get_db),
+):
     if db.scalar(select(models.User.id).limit(1)) is not None:
         raise HTTPException(
             status_code=403,
@@ -102,35 +115,109 @@ def bootstrap_admin(data: schemas.UserCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(user)
 
-    add_audit(db, user.id, "admin_created", "Birinchi administrator yaratildi")
+    add_audit(
+        db,
+        user.id,
+        "admin_created",
+        "Birinchi administrator yaratildi",
+    )
     db.commit()
 
     return user
 
 
+# Login
 @app.post("/auth/login", response_model=schemas.TokenOut)
-def login(data: schemas.LoginIn, db: Session = Depends(get_db)):
+def login(
+    data: schemas.LoginIn,
+    db: Session = Depends(get_db),
+):
     user = db.scalar(
-        select(models.User).where(models.User.username == data.username)
+        select(models.User).where(
+            models.User.username == data.username
+        )
     )
 
-    if not user or not verify_password(data.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Login yoki parol noto'g'ri")
+    if not user or not verify_password(
+        data.password,
+        user.password_hash,
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail="Login yoki parol noto'g'ri",
+        )
 
     if not user.is_active:
-        raise HTTPException(status_code=403, detail="Hisob faol emas")
+        raise HTTPException(
+            status_code=403,
+            detail="Hisob faol emas",
+        )
 
     token = create_access_token(user.id, user.role)
 
-    return {"access_token": token, "token_type": "bearer"}
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+    }
 
 
+# Administrator parolini xavfsiz tiklash
+@app.post("/auth/reset-admin-password")
+def reset_admin_password(
+    data: schemas.AdminPasswordReset,
+    x_admin_reset_key: str = Header(default=""),
+    db: Session = Depends(get_db),
+):
+    if not settings.admin_reset_key:
+        raise HTTPException(
+            status_code=503,
+            detail="Admin reset key sozlanmagan",
+        )
+
+    if not secrets.compare_digest(
+        x_admin_reset_key,
+        settings.admin_reset_key,
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Ruxsat berilmadi",
+        )
+
+    user = db.scalar(
+        select(models.User).where(
+            models.User.username == data.username
+        )
+    )
+
+    if not user or user.role != "admin":
+        raise HTTPException(
+            status_code=404,
+            detail="Administrator topilmadi",
+        )
+
+    user.password_hash = hash_password(data.new_password)
+
+    add_audit(
+        db,
+        user.id,
+        "admin_password_reset",
+        "Administrator paroli xavfsiz tiklandi",
+    )
+
+    db.commit()
+
+    return {
+        "message": "Administrator paroli yangilandi"
+    }
+
+
+# Joriy foydalanuvchi
 @app.get("/me", response_model=schemas.UserOut)
 def me(user=Depends(get_current_user)):
     return user
 
 
-# Xodimlarni faqat administrator yaratadi
+# Xodim yaratish
 @app.post("/users", response_model=schemas.UserOut)
 def create_user(
     data: schemas.UserCreate,
@@ -138,11 +225,16 @@ def create_user(
     admin=Depends(require_roles("admin")),
 ):
     exists = db.scalar(
-        select(models.User).where(models.User.username == data.username)
+        select(models.User).where(
+            models.User.username == data.username
+        )
     )
 
     if exists:
-        raise HTTPException(status_code=409, detail="Login band")
+        raise HTTPException(
+            status_code=409,
+            detail="Login band",
+        )
 
     user = models.User(
         full_name=data.full_name,
@@ -154,22 +246,31 @@ def create_user(
     db.add(user)
     db.flush()
 
-    add_audit(db, admin.id, "user_created", f"Xodim ID: {user.id}")
+    add_audit(
+        db,
+        admin.id,
+        "user_created",
+        f"Xodim ID: {user.id}",
+    )
+
     db.commit()
     db.refresh(user)
 
     return user
 
 
+# Xodimlar ro'yxati
 @app.get("/users", response_model=list[schemas.UserOut])
 def list_users(
     db: Session = Depends(get_db),
     admin=Depends(require_roles("admin")),
 ):
-    return db.scalars(select(models.User).order_by(models.User.id)).all()
+    return db.scalars(
+        select(models.User).order_by(models.User.id)
+    ).all()
 
 
-# Mijoz qo'shish
+# Mijoz yaratish
 @app.post("/customers", response_model=schemas.CustomerOut)
 def create_customer(
     data: schemas.CustomerCreate,
@@ -179,11 +280,16 @@ def create_customer(
     if data.passport_number:
         exists = db.scalar(
             select(models.Customer).where(
-                models.Customer.passport_number == data.passport_number
+                models.Customer.passport_number
+                == data.passport_number
             )
         )
+
         if exists:
-            raise HTTPException(status_code=409, detail="Pasport raqami mavjud")
+            raise HTTPException(
+                status_code=409,
+                detail="Pasport raqami mavjud",
+            )
 
     if data.pinfl:
         exists = db.scalar(
@@ -191,8 +297,12 @@ def create_customer(
                 models.Customer.pinfl == data.pinfl
             )
         )
+
         if exists:
-            raise HTTPException(status_code=409, detail="PINFL mavjud")
+            raise HTTPException(
+                status_code=409,
+                detail="PINFL mavjud",
+            )
 
     customer = models.Customer(
         **data.model_dump(),
@@ -202,20 +312,29 @@ def create_customer(
     db.add(customer)
     db.flush()
 
-    add_audit(db, user.id, "customer_created", f"Mijoz ID: {customer.id}")
+    add_audit(
+        db,
+        user.id,
+        "customer_created",
+        f"Mijoz ID: {customer.id}",
+    )
+
     db.commit()
     db.refresh(customer)
 
     return customer
 
 
+# Mijozlar ro'yxati
 @app.get("/customers", response_model=list[schemas.CustomerOut])
 def list_customers(
     db: Session = Depends(get_db),
     user=Depends(require_roles("operator", "manager", "admin")),
 ):
     return db.scalars(
-        select(models.Customer).order_by(models.Customer.id.desc())
+        select(models.Customer).order_by(
+            models.Customer.id.desc()
+        )
     ).all()
 
 
@@ -229,7 +348,10 @@ def create_application(
     customer = db.get(models.Customer, data.customer_id)
 
     if not customer:
-        raise HTTPException(status_code=404, detail="Mijoz topilmadi")
+        raise HTTPException(
+            status_code=404,
+            detail="Mijoz topilmadi",
+        )
 
     application = models.Application(
         **data.model_dump(),
@@ -240,39 +362,59 @@ def create_application(
     db.add(application)
     db.flush()
 
-    add_audit(db, user.id, "application_created", f"Ariza ID: {application.id}")
+    add_audit(
+        db,
+        user.id,
+        "application_created",
+        f"Ariza ID: {application.id}",
+    )
+
     db.commit()
     db.refresh(application)
 
     return application
 
 
+# Arizalar ro'yxati
 @app.get("/applications", response_model=list[schemas.ApplicationOut])
 def list_applications(
     db: Session = Depends(get_db),
     user=Depends(require_roles("operator", "manager", "admin")),
 ):
     return db.scalars(
-        select(models.Application).order_by(models.Application.id.desc())
+        select(models.Application).order_by(
+            models.Application.id.desc()
+        )
     ).all()
 
 
 # Arizani menejer yoki administrator ko'rib chiqadi
-@app.patch("/applications/{application_id}/review",
-           response_model=schemas.ApplicationOut)
+@app.patch(
+    "/applications/{application_id}/review",
+    response_model=schemas.ApplicationOut,
+)
 def review_application(
     application_id: int,
     data: schemas.ApplicationReview,
     db: Session = Depends(get_db),
     manager=Depends(require_roles("manager", "admin")),
 ):
-    application = db.get(models.Application, application_id)
+    application = db.get(
+        models.Application,
+        application_id,
+    )
 
     if not application:
-        raise HTTPException(status_code=404, detail="Ariza topilmadi")
+        raise HTTPException(
+            status_code=404,
+            detail="Ariza topilmadi",
+        )
 
     if application.status != "pending":
-        raise HTTPException(status_code=409, detail="Ariza avval ko'rib chiqilgan")
+        raise HTTPException(
+            status_code=409,
+            detail="Ariza avval ko'rib chiqilgan",
+        )
 
     application.status = data.status
     application.reviewed_by = manager.id
@@ -282,7 +424,11 @@ def review_application(
         db,
         manager.id,
         "application_reviewed",
-        f"Ariza ID: {application.id}; holati: {data.status}; izoh: {data.comment or ''}",
+        (
+            f"Ariza ID: {application.id}; "
+            f"holati: {data.status}; "
+            f"izoh: {data.comment or ''}"
+        ),
     )
 
     db.commit()
@@ -291,13 +437,16 @@ def review_application(
     return application
 
 
+# Audit tarixi
 @app.get("/audit")
 def list_audit(
     db: Session = Depends(get_db),
     admin=Depends(require_roles("admin")),
 ):
     logs = db.scalars(
-        select(models.AuditLog).order_by(models.AuditLog.id.desc())
+        select(models.AuditLog).order_by(
+            models.AuditLog.id.desc()
+        )
     ).all()
 
     return [
