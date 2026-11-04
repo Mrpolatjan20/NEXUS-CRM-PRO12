@@ -21,6 +21,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.foundation.border
+import androidx.compose.ui.window.Dialog
+import androidx.compose.runtime.DisposableEffect
+import androidx.camera.core.ImageProxy
+import androidx.camera.core.toBitmap
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -573,94 +581,231 @@ fun CustomerForm(close: () -> Unit, save: (String, String, String, String, Strin
     var pinfl by remember { mutableStateOf("") }
     var photoData by remember { mutableStateOf("") }
     var cameraError by remember { mutableStateOf("") }
-    val cameraLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.TakePicturePreview()
-    ) { bitmap ->
-        if (bitmap != null) {
-            val scaled = Bitmap.createScaledBitmap(bitmap, minOf(bitmap.width, 640), minOf(bitmap.height, 640), true)
-            val output = ByteArrayOutputStream()
-            scaled.compress(Bitmap.CompressFormat.JPEG, 65, output)
-            photoData = Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP)
-            cameraError = ""
-        } else {
-            cameraError = "Surat olinmadi. Kameraga ruxsat bering."
+    var showCamera by remember { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val cameraPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) showCamera = true else cameraError = "Kameradan foydalanish uchun ruxsat bering."
+    }
+
+    Dialog(
+        onDismissRequest = close,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = Color(0xFFF4F7FF)
+        ) {
+            Column(Modifier.fillMaxSize()) {
+                Row(
+                    Modifier.fillMaxWidth().background(Color.White).padding(horizontal = 18.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("‹", color = Green, fontSize = 32.sp, modifier = Modifier.clickable { close() })
+                    Spacer(Modifier.width(14.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Mijoz qo‘shish", color = Color(0xFF10264D), fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                        Text("Mijoz ma’lumotlarini kiriting", color = Color(0xFF657594), fontSize = 12.sp)
+                    }
+                    Text("Mrpolatjan CRM", color = Green, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+                Column(
+                    Modifier.fillMaxSize().weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Spacer(Modifier.height(4.dp))
+                    Box(
+                        Modifier.size(142.dp).background(Color(0xFFDCE8FF), androidx.compose.foundation.shape.CircleShape)
+                            .clickable {
+                                if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED) showCamera = true
+                                else cameraPermission.launch(android.Manifest.permission.CAMERA)
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (photoData.isNotBlank()) {
+                            val preview = remember(photoData) {
+                                try {
+                                    val bytes = Base64.decode(photoData, Base64.DEFAULT)
+                                    android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                                } catch (_: Exception) { null }
+                            }
+                            if (preview != null) Image(
+                                preview.asImageBitmap(),
+                                contentDescription = "Mijoz surati",
+                                modifier = Modifier.fillMaxSize().clip(androidx.compose.foundation.shape.CircleShape),
+                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                            ) else Text("👤", fontSize = 58.sp)
+                        } else {
+                            Text("👤", color = Color(0xFF6F91D0), fontSize = 66.sp)
+                        }
+                        Box(
+                            Modifier.align(Alignment.BottomEnd).size(44.dp)
+                                .background(Green, androidx.compose.foundation.shape.CircleShape)
+                                .clickable {
+                                    if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED) showCamera = true
+                                    else cameraPermission.launch(android.Manifest.permission.CAMERA)
+                                },
+                            contentAlignment = Alignment.Center
+                        ) { Text("📷", fontSize = 20.sp) }
+                    }
+                    Text(if (photoData.isBlank()) "Yuz rasmini olish" else "Surat biriktirildi", color = Green, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 8.dp, bottom = 16.dp))
+                    Card(
+                        Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(22.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        elevation = CardDefaults.cardElevation(3.dp)
+                    ) {
+                        Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                            Text("SHAXSIY MA’LUMOTLAR", color = Green, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.height(10.dp))
+                            OutlinedTextField(name, { name = it }, label = { Text("F.I.Sh.") }, singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(13.dp))
+                            Spacer(Modifier.height(9.dp))
+                            OutlinedTextField(phone, { phone = it }, label = { Text("Telefon raqami") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone), singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(13.dp))
+                            Spacer(Modifier.height(16.dp))
+                            Text("PASPORT MA’LUMOTLARI", color = Green, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.height(9.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedTextField(
+                                    passportSeries,
+                                    { passportSeries = it.uppercase().filter(Char::isLetter).take(2) },
+                                    label = { Text("Seriya") }, placeholder = { Text("AA") },
+                                    singleLine = true, modifier = Modifier.weight(0.8f), shape = RoundedCornerShape(13.dp)
+                                )
+                                OutlinedTextField(
+                                    passportNumber,
+                                    { passportNumber = it.filter(Char::isDigit).take(7) },
+                                    label = { Text("Pasport raqami") }, placeholder = { Text("1234567") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    singleLine = true, modifier = Modifier.weight(1.4f), shape = RoundedCornerShape(13.dp)
+                                )
+                            }
+                            Spacer(Modifier.height(9.dp))
+                            OutlinedTextField(
+                                pinfl, { pinfl = it.filter(Char::isDigit).take(14) },
+                                label = { Text("JSHSHIR (14 raqam)") }, placeholder = { Text("14 xonali raqam") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(13.dp)
+                            )
+                            Spacer(Modifier.height(9.dp))
+                            OutlinedTextField(
+                                birthDate,
+                                { birthDate = it.filter { ch -> ch.isDigit() || ch == '.' }.take(10) },
+                                label = { Text("Tug‘ilgan sana") }, placeholder = { Text("KK.OO.YYYY") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(13.dp)
+                            )
+                            Spacer(Modifier.height(9.dp))
+                            OutlinedTextField(address, { address = it }, label = { Text("Manzil") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(13.dp))
+                            if (cameraError.isNotBlank()) Text(cameraError, color = Color.Red, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
+                        }
+                    }
+                    Spacer(Modifier.height(14.dp))
+                    Button(
+                        onClick = {
+                            val dateOk = birthDate.isBlank() || Regex("^\\d{2}\\.\\d{2}\\.\\d{4}$").matches(birthDate)
+                            val passportOk = (passportSeries.isBlank() && passportNumber.isBlank()) ||
+                                (passportSeries.matches(Regex("^[A-Z]{2}$")) && passportNumber.matches(Regex("^\\d{7}$")))
+                            val pinflOk = pinfl.isBlank() || pinfl.matches(Regex("^\\d{14}$"))
+                            if (name.trim().length >= 2 && phone.trim().length >= 7 && dateOk && passportOk && pinflOk) {
+                                save(name.trim(), phone.trim(), address.trim(), birthDate, passportSeries, passportNumber, pinfl, photoData)
+                            } else {
+                                cameraError = "Ma’lumotlarni tekshiring. Pasport seriyasi, raqami va JSHSHIR formatiga e’tibor bering."
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth().height(54.dp),
+                        shape = RoundedCornerShape(15.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Green)
+                    ) { Text("✓   Saqlash", fontSize = 17.sp, fontWeight = FontWeight.Bold) }
+                    Spacer(Modifier.height(16.dp))
+                }
+            }
         }
     }
-    AlertDialog(
-        onDismissRequest = close,
-        title = { Text("Yangi mijoz") },
-        text = {
-            Column(Modifier.heightIn(max = 560.dp).verticalScroll(rememberScrollState())) {
-                OutlinedTextField(name, { name = it }, label = { Text("F.I.Sh.") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(phone, { phone = it }, label = { Text("Telefon") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone), singleLine = true, modifier = Modifier.fillMaxWidth())
-                Spacer(Modifier.height(8.dp))
-                Text("SHAXSIY HUJJAT MA’LUMOTLARI", color = Green, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                OutlinedTextField(
-                    birthDate,
-                    { birthDate = it.filter { ch -> ch.isDigit() || ch == '.' }.take(10) },
-                    label = { Text("Tug‘ilgan sana (KK.OO.YYYY)") },
-                    placeholder = { Text("08.04.2004") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        passportSeries,
-                        { passportSeries = it.uppercase().filter { ch -> ch.isLetter() }.take(2) },
-                        label = { Text("Seriya") },
-                        placeholder = { Text("AA") },
-                        singleLine = true,
-                        modifier = Modifier.weight(0.8f)
-                    )
-                    OutlinedTextField(
-                        passportNumber,
-                        { passportNumber = it.filter(Char::isDigit).take(7) },
-                        label = { Text("Pasport raqami") },
-                        placeholder = { Text("1234567") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true,
-                        modifier = Modifier.weight(1.5f)
-                    )
+
+    if (showCamera) {
+        Dialog(
+            onDismissRequest = { showCamera = false },
+            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            CameraCaptureScreen(
+                onClose = { showCamera = false },
+                onCaptured = { bitmap ->
+                    val scaled = Bitmap.createScaledBitmap(bitmap, minOf(bitmap.width, 720), minOf(bitmap.height, 720), true)
+                    val output = ByteArrayOutputStream()
+                    scaled.compress(Bitmap.CompressFormat.JPEG, 78, output)
+                    photoData = Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP)
+                    cameraError = ""
+                    showCamera = false
                 }
-                OutlinedTextField(
-                    pinfl,
-                    { pinfl = it.filter(Char::isDigit).take(14) },
-                    label = { Text("JSHSHIR (14 raqam)") },
-                    placeholder = { Text("14 xonali raqam") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(address, { address = it }, label = { Text("Manzil") }, modifier = Modifier.fillMaxWidth())
-                Spacer(Modifier.height(10.dp))
-                if (photoData.isNotBlank()) {
-                    val preview = remember(photoData) {
-                        val bytes = Base64.decode(photoData, Base64.DEFAULT)
-                        android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                    }
-                    if (preview != null) Image(preview.asImageBitmap(), contentDescription = "Surat", modifier = Modifier.size(110.dp))
+            )
+        }
+    }
+}
+
+@Composable
+fun CameraCaptureScreen(onClose: () -> Unit, onCaptured: (Bitmap) -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    val controller = remember {
+        androidx.camera.view.LifecycleCameraController(context).apply {
+            cameraSelector = androidx.camera.core.CameraSelector.DEFAULT_FRONT_CAMERA
+            setEnabledUseCases(androidx.camera.view.CameraController.IMAGE_CAPTURE or androidx.camera.view.CameraController.VIDEO_CAPTURE)
+        }
+    }
+    DisposableEffect(lifecycleOwner, controller) {
+        controller.bindToLifecycle(lifecycleOwner)
+        onDispose { controller.unbind() }
+    }
+    Box(Modifier.fillMaxSize().background(Color(0xFF18243D))) {
+        AndroidView(
+            factory = { ctx ->
+                androidx.camera.view.PreviewView(ctx).apply {
+                    this.controller = controller
+                    scaleType = androidx.camera.view.PreviewView.ScaleType.FILL_CENTER
                 }
-                OutlinedButton(onClick = { cameraLauncher.launch(null) }, modifier = Modifier.fillMaxWidth()) {
-                    Text(if (photoData.isBlank()) "📷 Yuzini suratga olish" else "📷 Suratni qayta olish")
-                }
-                if (cameraError.isNotBlank()) Text(cameraError, color = Color.Red)
-                if (photoData.isNotBlank()) Text("Surat biriktirildi", color = Green)
+            },
+            modifier = Modifier.fillMaxSize()
+        )
+        Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 18.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("‹", color = Color.White, fontSize = 34.sp, modifier = Modifier.clickable { onClose() })
+                Spacer(Modifier.width(18.dp))
+                Text("Rasmni tanlang", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
             }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                val dateOk = birthDate.isBlank() || Regex("^\\d{2}\\.\\d{2}\\.\\d{4}$").matches(birthDate)
-                val passportOk = (passportSeries.isBlank() && passportNumber.isBlank()) ||
-                    (passportSeries.matches(Regex("^[A-Z]{2}$")) && passportNumber.matches(Regex("^\\d{7}$")))
-                val pinflOk = pinfl.isBlank() || pinfl.matches(Regex("^\\d{14}$"))
-                if (name.trim().length >= 2 && phone.trim().length >= 7 && dateOk && passportOk && pinflOk) {
-                    save(name.trim(), phone.trim(), address.trim(), birthDate, passportSeries, passportNumber, pinfl, photoData)
-                }
-            }) { Text("Saqlash") }
-        },
-        dismissButton = { TextButton(onClick = close) { Text("Bekor qilish") } }
-    )
+            Spacer(Modifier.weight(1f))
+            Box(
+                Modifier.size(290.dp).border(3.dp, Color.White, androidx.compose.foundation.shape.CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Box(Modifier.size(278.dp).border(1.dp, Color(0xFF8EB5FF), androidx.compose.foundation.shape.CircleShape))
+            }
+            Text("Yuzingizni doira ichiga joylashtiring", color = Color.White, fontSize = 14.sp, modifier = Modifier.padding(top = 24.dp))
+            Spacer(Modifier.weight(1f))
+            Box(
+                Modifier.padding(bottom = 42.dp).size(82.dp)
+                    .border(5.dp, Color.White, androidx.compose.foundation.shape.CircleShape)
+                    .padding(7.dp)
+                    .background(Green, androidx.compose.foundation.shape.CircleShape)
+                    .clickable {
+                        controller.takePicture(
+                            androidx.core.content.ContextCompat.getMainExecutor(context),
+                            object : androidx.camera.core.ImageCapture.OnImageCapturedCallback() {
+                                override fun onCaptureSuccess(image: androidx.camera.core.ImageProxy) {
+                                    try { onCaptured(image.toBitmap()) } finally { image.close() }
+                                }
+                                override fun onError(exception: androidx.camera.core.ImageCaptureException) {
+                                    android.util.Log.e("MrpolatjanCRM", "Camera capture failed", exception)
+                                }
+                            }
+                        )
+                    }
+            )
+        }
+    }
 }
 
 @Composable
