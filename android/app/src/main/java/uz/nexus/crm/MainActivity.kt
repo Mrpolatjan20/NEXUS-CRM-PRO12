@@ -210,10 +210,7 @@ fun NexusApp() {
             }
         )
     } else {
-        MainDashboard(session!!) {
-            try { secureSessionPrefs(context).edit().clear().apply() } catch (_: Exception) {}
-            session = null
-        }
+        MainDashboard(session!!, logout = { session = null })
     }
 }
 
@@ -234,7 +231,11 @@ fun LoginScreen(onLogin: (Session) -> Unit) {
     }
 
     LaunchedEffect(hasSavedLogin) {
-        if (hasSavedLogin) {
+        val faceEnabled = try {
+            context.getSharedPreferences("nexus_settings", Context.MODE_PRIVATE)
+                .getBoolean("face_login_enabled", false)
+        } catch (_: Exception) { false }
+        if (hasSavedLogin && faceEnabled) {
             kotlinx.coroutines.delay(500)
             val savedToken = try {
                 secureSessionPrefs(context).getString("access_token", null)
@@ -458,6 +459,7 @@ fun LoginScreen(onLogin: (Session) -> Unit) {
 fun MainDashboard(session: Session, logout: () -> Unit) {
     val context = LocalContext.current
     var page by remember { mutableStateOf("home") }
+    var faceMessage by remember { mutableStateOf("") }
     var menuExpanded by remember { mutableStateOf(false) }
     var selectedContractCode by remember { mutableStateOf("") }
     var selectedStockAmount by remember { mutableStateOf("") }
@@ -474,6 +476,10 @@ fun MainDashboard(session: Session, logout: () -> Unit) {
                     DropdownMenuItem(
                         text = { Text("Sozlamalar") },
                         onClick = { menuExpanded = false; page = "settings" }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("◉ Yuz orqali kirishni sozlash") },
+                        onClick = { menuExpanded = false; page = "face_settings" }
                     )
                     DropdownMenuItem(
                         text = { Text(if (darkMode.value) "☀ Kunduzgi rejim" else "☾ Qorong‘i rejim") },
@@ -511,6 +517,64 @@ fun MainDashboard(session: Session, logout: () -> Unit) {
                 },
                 back = { page = "home" }
             )
+            "face_settings" -> FaceLoginSettingsPage(
+                enabled = context.getSharedPreferences("nexus_settings", Context.MODE_PRIVATE)
+                    .getBoolean("face_login_enabled", false),
+                message = faceMessage,
+                onEnable = {
+                    val activity = context as? FragmentActivity
+                    if (activity == null) {
+                        faceMessage = "Biometrik sozlamani ochib bo‘lmadi."
+                    } else {
+                        val manager = BiometricManager.from(context)
+                        val availability = manager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_WEAK)
+                        if (availability != BiometricManager.BIOMETRIC_SUCCESS) {
+                            faceMessage = when (availability) {
+                                BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED ->
+                                    "Avval telefon Sozlamalari → Xavfsizlik bo‘limida yuz yoki barmoq izini ro‘yxatdan o‘tkazing."
+                                BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE ->
+                                    "Telefon ilovalar uchun biometrik tasdiqlashni qo‘llab-quvvatlamaydi."
+                                else -> "Biometrik tizim hozircha ishlamayapti."
+                            }
+                        } else {
+                            val prompt = BiometricPrompt(
+                                activity,
+                                ContextCompat.getMainExecutor(context),
+                                object : BiometricPrompt.AuthenticationCallback() {
+                                    override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                                        super.onAuthenticationSucceeded(result)
+                                        context.getSharedPreferences("nexus_settings", Context.MODE_PRIVATE)
+                                            .edit().putBoolean("face_login_enabled", true).apply()
+                                        faceMessage = "Yuz/biometrik kirish yoqildi. Endi Chiqish tugmasidan chiqing va qayta kirib ko‘ring."
+                                    }
+                                    override fun onAuthenticationError(code: Int, errString: CharSequence) {
+                                        super.onAuthenticationError(code, errString)
+                                        faceMessage = errString.toString()
+                                    }
+                                    override fun onAuthenticationFailed() {
+                                        super.onAuthenticationFailed()
+                                        faceMessage = "Biometrik tasdiqlash amalga oshmadi. Qayta urinib ko‘ring."
+                                    }
+                                }
+                            )
+                            prompt.authenticate(
+                                BiometricPrompt.PromptInfo.Builder()
+                                    .setTitle("NEXUS CRM yuz orqali kirish")
+                                    .setSubtitle("Telefoningizdagi yuz yoki biometrik usulni tasdiqlang")
+                                    .setNegativeButtonText("Bekor qilish")
+                                    .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_WEAK)
+                                    .build()
+                            )
+                        }
+                    }
+                },
+                onDisable = {
+                    context.getSharedPreferences("nexus_settings", Context.MODE_PRIVATE)
+                        .edit().putBoolean("face_login_enabled", false).apply()
+                    faceMessage = "Yuz orqali kirish o‘chirildi."
+                },
+                back = { page = "home" }
+            )
             else -> ApiPage(
                 session = session,
                 page = page,
@@ -521,6 +585,56 @@ fun MainDashboard(session: Session, logout: () -> Unit) {
                 selectedStockAmount = selectedStockAmount,
                 onContractCreated = { page = "contracts" }
             )
+        }
+    }
+}
+
+@Composable
+fun FaceLoginSettingsPage(
+    enabled: Boolean,
+    message: String,
+    onEnable: () -> Unit,
+    onDisable: () -> Unit,
+    back: () -> Unit
+) {
+    Column(
+        Modifier.fillMaxSize().padding(18.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        Text("‹ Orqaga", color = Green, fontWeight = FontWeight.Bold,
+            modifier = Modifier.clickable { back() }.padding(8.dp))
+        Card(
+            colors = CardDefaults.cardColors(containerColor = CardSurface),
+            shape = RoundedCornerShape(18.dp)
+        ) {
+            Column(
+                Modifier.fillMaxWidth().padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text("Yuz orqali kirish", color = Green, fontSize = 21.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    "Bir marta login-parol bilan kirganingizdan keyin telefon biometrikasini tasdiqlab yoqing. Chiqib qayta kirganingizda NEXUS CRM yuz/biometrik tasdiqni so‘raydi va tasdiqlansa akkauntingiz ochiladi.",
+                    color = PrimaryText, fontSize = 14.sp
+                )
+                Text(
+                    "Eslatma: ilova yuzingizni o‘zi ro‘yxatdan o‘tkazmaydi. Yuz avval telefon Sozlamalarida ro‘yxatdan o‘tgan bo‘lishi va telefon uni ilovalarga biometrik tasdiq sifatida taqdim qilishi kerak. Ayrim telefonlarda yuz bilan ochish faqat ekran qulfida ishlaydi; bunday holatda ilova barmoq izi yoki parolni talab qilishi mumkin.",
+                    color = SecondaryText, fontSize = 12.sp
+                )
+                Text(
+                    if (enabled) "Holat: yoqilgan" else "Holat: o‘chirilgan",
+                    color = if (enabled) Green else SecondaryText,
+                    fontWeight = FontWeight.Bold
+                )
+                Button(
+                    onClick = onEnable,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = Green)
+                ) { Text("BIOMETRIK KIRISHNI YOQISH") }
+                OutlinedButton(onClick = onDisable, modifier = Modifier.fillMaxWidth()) {
+                    Text("O‘CHIRISH")
+                }
+                if (message.isNotBlank()) Text(message, color = Green, fontSize = 13.sp)
+            }
         }
     }
 }
