@@ -88,3 +88,22 @@ class ApplicationOut(BaseModel):
 class AdminPasswordReset(BaseModel):
     username: str = Field(min_length=3, max_length=80)
     new_password: str = Field(min_length=8, max_length=72)
+
+class ContractCreate(BaseModel):
+    customer_id: int
+
+
+class RecordReview(BaseModel):
+    status: Literal["approved", "rejected"]
+    comment: str | None = None
+
+
+class StockOutCreate(BaseModel):
+    contract_id: int
+    amount: float = Field(gt=0)
+
+
+class InvoiceCreate(BaseModel):
+    contract_id: int
+    amount: float = Field(gt=0)
+    supplier: str = Field(min_length=2, max_length=200)
