@@ -743,6 +743,7 @@ fun MessageCard(message: String) {
 @Composable
 fun ContractRows(raw: String, session: Session, changed: () -> Unit, onOpenStock: (String) -> Unit = {}) {
     val arr = remember(raw) { JSONArray(raw) }
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var signingId by remember { mutableIntStateOf(0) }
     var signingStatus by remember { mutableStateOf("approved") }
@@ -792,7 +793,7 @@ fun ContractRows(raw: String, session: Session, changed: () -> Unit, onOpenStock
                             JSONObject().put("status", status).put("signature_data", signature))
                         changed()
                     } catch (e: Exception) {
-                        android.widget.Toast.makeText(androidx.compose.ui.platform.LocalContext.current, e.message ?: "Tasdiqlash xatosi", android.widget.Toast.LENGTH_LONG).show()
+                        android.widget.Toast.makeText(context, e.message ?: "Tasdiqlash xatosi", android.widget.Toast.LENGTH_LONG).show()
                     }
                 }
             }
@@ -801,8 +802,9 @@ fun ContractRows(raw: String, session: Session, changed: () -> Unit, onOpenStock
 }
 
 @Composable
-fun StockRows(raw: String, session: Session, changed: () -> Unit) {
+fun StockRows(raw: String, session: Session, changed: () -> Unit, onOpenInvoice: (String, String) -> Unit = { _, _ -> }) {
     val arr = remember(raw) { JSONArray(raw) }
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var signingId by remember { mutableIntStateOf(0) }
     var signingStatus by remember { mutableStateOf("approved") }
@@ -850,7 +852,7 @@ fun StockRows(raw: String, session: Session, changed: () -> Unit) {
                             JSONObject().put("status", status).put("signature_data", signature))
                         changed()
                     } catch (e: Exception) {
-                        android.widget.Toast.makeText(androidx.compose.ui.platform.LocalContext.current, e.message ?: "Tasdiqlash xatosi", android.widget.Toast.LENGTH_LONG).show()
+                        android.widget.Toast.makeText(context, e.message ?: "Tasdiqlash xatosi", android.widget.Toast.LENGTH_LONG).show()
                     }
                 }
             }
@@ -861,6 +863,7 @@ fun StockRows(raw: String, session: Session, changed: () -> Unit) {
 @Composable
 fun InvoiceRows(raw: String, session: Session, changed: () -> Unit) {
     val arr=remember(raw){JSONArray(raw)}
+    val context = LocalContext.current
     val scope=rememberCoroutineScope()
     var signingId by remember { mutableIntStateOf(0) }
     var signingStatus by remember { mutableStateOf("approved") }
@@ -881,6 +884,7 @@ fun InvoiceRows(raw: String, session: Session, changed: () -> Unit) {
                             OutlinedButton(onClick={ signingId = id; signingStatus = "rejected" }){Text("Imzo + rad etish")}
                         }
                     }
+                    if (o.text("signature_data").isNotBlank()) Text("✍ Imzo saqlangan", color = Green, fontSize = 12.sp)
                 }
             }
         }
@@ -899,7 +903,7 @@ fun InvoiceRows(raw: String, session: Session, changed: () -> Unit) {
                             JSONObject().put("status", status).put("signature_data", signature))
                         changed()
                     } catch (e: Exception) {
-                        android.widget.Toast.makeText(androidx.compose.ui.platform.LocalContext.current, e.message ?: "Tasdiqlash xatosi", android.widget.Toast.LENGTH_LONG).show()
+                        android.widget.Toast.makeText(context, e.message ?: "Tasdiqlash xatosi", android.widget.Toast.LENGTH_LONG).show()
                     }
                 }
             }
