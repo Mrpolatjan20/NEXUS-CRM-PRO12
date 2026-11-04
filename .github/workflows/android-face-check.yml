@@ -26,7 +26,7 @@ jobs:
         with:
           gradle-version: "8.9"
 
-      - name: Download MobileFaceNet model
+      - name: Download and validate MobileFaceNet model
         run: |
           set -euo pipefail
           mkdir -p android/app/src/main/assets
@@ -34,8 +34,36 @@ jobs:
             "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models/models/mobile_facenet/releases/v0.65.0/mobile_facenet-tflite-float.zip" \
             -o "$RUNNER_TEMP/mobile_facenet.zip"
           unzip -o "$RUNNER_TEMP/mobile_facenet.zip" -d "$RUNNER_TEMP/mobile_facenet"
-          MODEL="$(find "$RUNNER_TEMP/mobile_facenet" -type f -name '*.tflite' | head -n 1)"
-          test -n "$MODEL"
+          python -m pip install --quiet tflite
+          MODEL="$(python - <<'PY'
+          import glob, os, sys
+          import tflite
+
+          files = glob.glob(os.path.join(os.environ["RUNNER_TEMP"], "mobile_facenet", "**", "*.tflite"), recursive=True)
+          for path in files:
+              try:
+                  data = open(path, "rb").read()
+                  model = tflite.Model.GetRootAsModel(data, 0)
+                  graph = model.Subgraphs(0)
+                  input_index = int(graph.Inputs(0))
+                  output_index = int(graph.Outputs(0))
+                  input_tensor = graph.Tensors(input_index)
+                  output_tensor = graph.Tensors(output_index)
+                  input_shape = input_tensor.ShapeAsNumpy().tolist()
+                  output_shape = output_tensor.ShapeAsNumpy().tolist()
+                  if (input_tensor.Type() == tflite.TensorType.FLOAT32
+                      and input_shape == [1, 112, 112, 3]
+                      and output_tensor.Type() == tflite.TensorType.FLOAT32
+                      and output_shape == [1, 128]):
+                      print(path)
+                      sys.exit(0)
+              except Exception:
+                  continue
+          print("ERROR: ZIP ichida FLOAT32 [1,112,112,3] input va [1,128] output model topilmadi.", file=sys.stderr)
+          sys.exit(1)
+          PY
+          )"
+          echo "Tanlangan MobileFaceNet: $MODEL"
           cp "$MODEL" android/app/src/main/assets/mobilefacenet.tflite
           test -s android/app/src/main/assets/mobilefacenet.tflite
 
