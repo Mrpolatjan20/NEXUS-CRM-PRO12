@@ -13,9 +13,12 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -34,6 +37,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -286,6 +291,7 @@ fun MainDashboard(session: Session, logout: () -> Unit) {
     var page by remember { mutableStateOf("home") }
     var menuExpanded by remember { mutableStateOf(false) }
     var selectedContractCode by remember { mutableStateOf("") }
+    var selectedStockAmount by remember { mutableStateOf("") }
 
     Column(Modifier.fillMaxSize().background(LightGreen)) {
         Row(
@@ -342,6 +348,8 @@ fun MainDashboard(session: Session, logout: () -> Unit) {
                 back = { page = "home" },
                 selectedContractCode = selectedContractCode,
                 onOpenStock = { code -> selectedContractCode = code; page = "stock" },
+                onOpenInvoice = { code, amount -> selectedContractCode = code; selectedStockAmount = amount; page = "invoices" },
+                selectedStockAmount = selectedStockAmount,
                 onContractCreated = { page = "contracts" }
             )
         }
@@ -518,7 +526,7 @@ fun HomePage(open: (String) -> Unit) {
 }
 
 @Composable
-fun ApiPage(session: Session, page: String, back: () -> Unit, selectedContractCode: String = "", onOpenStock: (String) -> Unit = {}, onContractCreated: () -> Unit = {}) {
+fun ApiPage(session: Session, page: String, back: () -> Unit, selectedContractCode: String = "", onOpenStock: (String) -> Unit = {}, onOpenInvoice: (String, String) -> Unit = { _, _ -> }, selectedStockAmount: String = "", onContractCreated: () -> Unit = {}) {
     val title = when (page) {
         "search" -> "Mijoz qidiring"
         "customers" -> "Mijozlar"
@@ -534,7 +542,7 @@ fun ApiPage(session: Session, page: String, back: () -> Unit, selectedContractCo
     var loading by remember(page) { mutableStateOf(true) }
     var error by remember(page) { mutableStateOf("") }
     var refresh by remember(page) { mutableIntStateOf(0) }
-    var dialog by remember(page) { mutableStateOf(page == "stock" && selectedContractCode.isNotBlank()) }
+    var dialog by remember(page) { mutableStateOf((page == "stock" || page == "invoices") && selectedContractCode.isNotBlank()) }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(page, refresh) {
@@ -598,7 +606,7 @@ fun ApiPage(session: Session, page: String, back: () -> Unit, selectedContractCo
                 }
                 "stock" -> {
                     ActionButton("＋ Chiqim tovar kiritish") { dialog = true }
-                    StockRows(raw, session) { refresh++ }
+                    StockRows(raw, session, { refresh++ }, onOpenInvoice)
                 }
                 "invoices" -> {
                     ActionButton("＋ Faktura kiritish") { dialog = true }
@@ -677,6 +685,8 @@ fun ApiPage(session: Session, page: String, back: () -> Unit, selectedContractCo
             )
             "invoices" -> BusinessRecordForm(
                 kind = "invoice",
+                initialContractCode = selectedContractCode,
+                initialAmount = selectedStockAmount,
                 close = { dialog = false },
                 save = { _, contractId, amount, supplier ->
                     scope.launch {
@@ -823,13 +833,13 @@ fun InvoiceRows(raw: String, session: Session, changed: () -> Unit) {
 }
 
 @Composable
-fun BusinessRecordForm(kind: String, close: () -> Unit, save: (Int, Int, String, String) -> Unit, initialContractCode: String = "") {
+fun BusinessRecordForm(kind: String, close: () -> Unit, save: (Int, Int, String, String) -> Unit, initialContractCode: String = "", initialAmount: String = "") {
     var customerId by remember { mutableStateOf("") }
     var contractId by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
     var supplier by remember { mutableStateOf("") }
     var problem by remember { mutableStateOf("") }
-    LaunchedEffect(initialContractCode) { if (initialContractCode.isNotBlank()) contractId = initialContractCode.filter(Char::isDigit) }
+    LaunchedEffect(initialContractCode, initialAmount) { if (initialContractCode.isNotBlank()) contractId = initialContractCode.filter(Char::isDigit); if (initialAmount.isNotBlank()) amount = initialAmount }
     val isContract=kind=="contract"
     val isStock=kind=="stock"
     val title=if(isContract) "Shartnomaga so‘rov" else if(isStock) "Chiqim tovar" else "Yangi faktura"
