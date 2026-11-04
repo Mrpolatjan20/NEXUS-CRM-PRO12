@@ -34,6 +34,15 @@ with engine.begin() as connection:
         connection.execute(text("ALTER TABLE customers ADD COLUMN offer_accepted BOOLEAN NOT NULL DEFAULT 0"))
     if "personal_data_consent" not in customer_columns:
         connection.execute(text("ALTER TABLE customers ADD COLUMN personal_data_consent BOOLEAN NOT NULL DEFAULT 0"))
+    contracts_columns = {column["name"] for column in inspect(engine).get_columns("contracts")}
+    if "signature_data" not in contracts_columns:
+        connection.execute(text("ALTER TABLE contracts ADD COLUMN signature_data TEXT"))
+    stock_outs_columns = {column["name"] for column in inspect(engine).get_columns("stock_outs")}
+    if "signature_data" not in stock_outs_columns:
+        connection.execute(text("ALTER TABLE stock_outs ADD COLUMN signature_data TEXT"))
+    invoices_columns = {column["name"] for column in inspect(engine).get_columns("invoices")}
+    if "signature_data" not in invoices_columns:
+        connection.execute(text("ALTER TABLE invoices ADD COLUMN signature_data TEXT"))
 
 app = FastAPI(
     title="NEXUS CRM PRO API",
@@ -559,6 +568,7 @@ def review_contract(contract_id: int, data: schemas.RecordReview, db: Session = 
     if contract.status != "pending":
         raise HTTPException(status_code=409, detail="Shartnoma avval ko'rib chiqilgan")
     contract.status = data.status
+    contract.signature_data = data.signature_data
     contract.reviewed_by = manager.id
     contract.reviewed_at = datetime.now(timezone.utc)
     add_audit(db, manager.id, "contract_reviewed", f"Kod: {contract.contract_code}; status: {data.status}; izoh: {data.comment or ''}")
@@ -597,6 +607,7 @@ def review_stock_out(item_id: int, data: schemas.RecordReview, db: Session = Dep
     if item.status != "pending":
         raise HTTPException(status_code=409, detail="Chiqim avval ko'rib chiqilgan")
     item.status = data.status
+    item.signature_data = data.signature_data
     item.reviewed_by = manager.id
     item.reviewed_at = datetime.now(timezone.utc)
     add_audit(db, manager.id, "stock_out_reviewed", f"Chiqim ID: {item.id}; status: {data.status}; izoh: {data.comment or ''}")
@@ -635,6 +646,7 @@ def review_invoice(invoice_id: int, data: schemas.RecordReview, db: Session = De
     if invoice.status != "pending":
         raise HTTPException(status_code=409, detail="Faktura avval ko'rib chiqilgan")
     invoice.status = data.status
+    invoice.signature_data = data.signature_data
     invoice.reviewed_by = manager.id
     invoice.reviewed_at = datetime.now(timezone.utc)
     add_audit(db, manager.id, "invoice_reviewed", f"Faktura ID: {invoice.id}; status: {data.status}; izoh: {data.comment or ''}")
