@@ -489,7 +489,7 @@ fun HomePage(open: (String) -> Unit) {
         menu.forEach { item ->
             Card(
                 Modifier.fillMaxWidth().padding(bottom = 10.dp).clickable { open(item.first) },
-                colors = CardDefaults.cardColors(containerColor = Color.White),
+                colors = CardDefaults.cardColors(containerColor = CardSurface),
                 shape = RoundedCornerShape(14.dp)
             ) {
                 Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -534,7 +534,7 @@ fun ApiPage(session: Session, page: String, back: () -> Unit, selectedContractCo
     var loading by remember(page) { mutableStateOf(true) }
     var error by remember(page) { mutableStateOf("") }
     var refresh by remember(page) { mutableIntStateOf(0) }
-    var dialog by remember(page) { mutableStateOf(false) }
+    var dialog by remember(page) { mutableStateOf(page == "stock" && selectedContractCode.isNotBlank()) }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(page, refresh) {
@@ -725,7 +725,7 @@ fun ActionButton(label: String, action: () -> Unit) {
 
 @Composable
 fun MessageCard(message: String) {
-    Card(Modifier.fillMaxWidth().padding(vertical = 5.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+    Card(Modifier.fillMaxWidth().padding(vertical = 5.dp), colors = CardDefaults.cardColors(containerColor = CardSurface)) {
         Text(message, Modifier.padding(16.dp), color = Color.DarkGray)
     }
 }
@@ -740,7 +740,7 @@ fun ContractRows(raw: String, session: Session, changed: () -> Unit, onOpenStock
             val o = arr.getJSONObject(i)
             val id = o.optInt("id")
             val status = o.text("status")
-            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(14.dp)) {
+            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = CardSurface), shape = RoundedCornerShape(14.dp)) {
                 Column(Modifier.padding(14.dp)) {
                     Text("Mijozning F.I.O si:", color = Color.Gray, fontSize = 12.sp)
                     Text(o.text("customer_name"), color = Green, fontWeight = FontWeight.Bold)
@@ -803,7 +803,7 @@ fun InvoiceRows(raw: String, session: Session, changed: () -> Unit) {
         if(arr.length()==0) item { MessageCard("Hozircha fakturalar yo‘q.") }
         items((0 until arr.length()).toList()) { i ->
             val o=arr.getJSONObject(i); val id=o.optInt("id"); val status=o.text("status")
-            Card(Modifier.fillMaxWidth(),colors=CardDefaults.cardColors(containerColor=Color.White),shape=RoundedCornerShape(14.dp)) {
+            Card(Modifier.fillMaxWidth(),colors=CardDefaults.cardColors(containerColor=CardSurface),shape=RoundedCornerShape(14.dp)) {
                 Column(Modifier.padding(14.dp)) {
                     Text("Ta’minotchi:",color=Color.Gray,fontSize=12.sp)
                     Text(o.text("supplier"),color=Green,fontWeight=FontWeight.Bold)
@@ -886,7 +886,7 @@ fun CustomerSearchRows(raw: String) {
                 items(matches) { item ->
                     Card(
                         Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        colors = CardDefaults.cardColors(containerColor = CardSurface),
                         shape = RoundedCornerShape(14.dp)
                     ) {
                         Column(Modifier.padding(14.dp)) {
@@ -910,7 +910,7 @@ fun CustomerRows(raw: String, onCreateContract: (Int) -> Unit = {}) {
         items((0 until arr.length()).toList()) { i ->
             val o = arr.getJSONObject(i)
             val photo = o.text("photo_data")
-            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = CardSurface)) {
                 Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (photo.isNotBlank()) {
                         val bitmap = remember(photo) {
@@ -925,7 +925,7 @@ fun CustomerRows(raw: String, onCreateContract: (Int) -> Unit = {}) {
                         Box(Modifier.size(64.dp), contentAlignment = Alignment.Center) { Text("👤", fontSize = 28.sp) }
                     }
                     Spacer(Modifier.width(12.dp))
-                    Column {
+                    Column(Modifier.weight(1f)) {
                         Text("#" + o.optInt("id") + "  " + o.text("full_name"), color = Green, fontWeight = FontWeight.Bold)
                         Text("Telefon: " + o.text("phone"))
                         Text("Tug‘ilgan sana: " + o.text("birth_date"))
