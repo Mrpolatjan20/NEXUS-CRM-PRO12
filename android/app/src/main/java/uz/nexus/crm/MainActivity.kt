@@ -708,11 +708,7 @@ fun UpdatePage(back: () -> Unit) {
 @Composable
 fun HomePage(open: (String) -> Unit) {
     val menu = listOf(
-        "search" to "Mijoz qidiring",
-        "customers" to "Mijozlar",
-        "contracts" to "Shartnomalar",
-        "stock" to "Chiqim tovar",
-        "invoices" to "Fakturalar",
+        "workflow" to "So‘rovnoma",
         "applications" to "Moliyalashtirish arizalari",
         "employees" to "Xodimlar",
         "reports" to "Hisobotlar",
@@ -732,11 +728,7 @@ fun HomePage(open: (String) -> Unit) {
                 Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         when (item.first) {
-                            "search" -> "🔎"
-                            "customers" -> "👥"
-                            "contracts" -> "📄"
-                            "stock" -> "📦"
-                            "invoices" -> "🧾"
+                            "workflow" -> "📝"
                             "applications" -> "📋"
                             "employees" -> "👨‍💼"
                             "reports" -> "📊"
@@ -757,11 +749,7 @@ fun HomePage(open: (String) -> Unit) {
 @Composable
 fun ApiPage(session: Session, page: String, back: () -> Unit, selectedContractCode: String = "", onOpenStock: (String) -> Unit = {}, onOpenInvoice: (String, String) -> Unit = { _, _ -> }, selectedStockAmount: String = "", onContractCreated: () -> Unit = {}) {
     val title = when (page) {
-        "search" -> "Mijoz qidiring"
-        "customers" -> "Mijozlar"
-        "contracts" -> "Shartnomalar"
-        "stock" -> "Chiqim tovar"
-        "invoices" -> "Fakturalar"
+        "workflow" -> "So‘rovnoma"
         "applications" -> "Moliyalashtirish arizalari"
         "employees" -> "Xodimlar"
         "reports" -> "Hisobotlar"
@@ -779,7 +767,7 @@ fun ApiPage(session: Session, page: String, back: () -> Unit, selectedContractCo
         error = ""
         try {
             raw = when (page) {
-                "customers", "search" -> api("GET", "/customers", session.token)
+                "customers", "search", "workflow" -> api("GET", "/customers", session.token)
                 "applications" -> api("GET", "/finance-applications", session.token)
                 "employees" -> api("GET", "/users", session.token)
                 "audit" -> api("GET", "/audit", session.token)
@@ -815,7 +803,7 @@ fun ApiPage(session: Session, page: String, back: () -> Unit, selectedContractCo
             }
         } else {
             when (page) {
-                "customers" -> {
+                "customers", "workflow" -> {
                     ActionButton("＋ Yangi mijoz") { dialog = true }
                     CustomerRows(raw) { customerId ->
                         scope.launch {
@@ -857,7 +845,7 @@ fun ApiPage(session: Session, page: String, back: () -> Unit, selectedContractCo
 
     if (dialog) {
         when (page) {
-            "customers" -> CustomerForm(
+            "customers", "workflow" -> CustomerForm(
                 close = { dialog = false },
                 save = { name, phone, address, birthDate, passportSeries, passportNumber, pinfl, photoData, offerAccepted, personalDataConsent ->
                     scope.launch {
@@ -878,9 +866,16 @@ fun ApiPage(session: Session, page: String, back: () -> Unit, selectedContractCo
                                 .put("photo_data", if (photoData.isBlank()) JSONObject.NULL else photoData)
                                 .put("offer_accepted", offerAccepted)
                                 .put("personal_data_consent", personalDataConsent)
-                            api("POST", "/customers", session.token, customerBody)
-                            dialog = false
-                            refresh++
+                            val createdCustomer = JSONObject(api("POST", "/customers", session.token, customerBody))
+                            val customerId = createdCustomer.optInt("id")
+                            if (page == "workflow" && customerId > 0) {
+                                val contract = JSONObject(api("POST", "/contracts", session.token, JSONObject().put("customer_id", customerId)))
+                                selectedContractCode = contract.text("contract_code")
+                                page = "contracts"
+                            } else {
+                                dialog = false
+                                refresh++
+                            }
                         } catch (e: Exception) { error = e.message ?: "Saqlash xatosi"; dialog = false }
                     }
                 }
