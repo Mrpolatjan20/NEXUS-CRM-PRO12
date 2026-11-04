@@ -40,6 +40,9 @@ class Customer(Base):
     photo_path: Mapped[str | None] = mapped_column(
         String(500), nullable=True
     )
+    photo_data: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow
