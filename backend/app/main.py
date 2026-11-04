@@ -475,3 +475,125 @@ def list_audit(
         }
         for log in logs
     ]
+
+
+# Shartnoma so'rovini yuborish
+@app.post("/contracts")
+def create_contract(
+    data: schemas.ContractCreate,
+    db: Session = Depends(get_db),
+    user=Depends(require_roles("operator", "manager", "admin")),
+):
+    customer = db.get(models.Customer, data.customer_id)
+    if not customer:
+        raise HTTPException(status_code=404, detail="Mijoz topilmadi")
+    contract = models.Contract(
+        contract_code="1000" + str(datetime.now().strftime("%y%m%d")) + str(secrets.randbelow(900) + 100),
+        customer_id=customer.id,
+        status="pending",
+        created_by=user.id,
+    )
+    db.add(contract)
+    db.flush()
+    add_audit(db, user.id, "contract_requested", f"Shartnoma kodi: {contract.contract_code}")
+    db.commit()
+    db.refresh(contract)
+    return {"id": contract.id, "contract_code": contract.contract_code, "customer_id": customer.id, "customer_name": customer.full_name, "status": contract.status, "created_at": contract.created_at}
+
+
+@app.get("/contracts")
+def list_contracts(db: Session = Depends(get_db), user=Depends(require_roles("operator", "manager", "admin"))):
+    rows = db.execute(select(models.Contract, models.Customer).join(models.Customer, models.Contract.customer_id == models.Customer.id).order_by(models.Contract.id.desc())).all()
+    return [{"id": c.id, "contract_code": c.contract_code, "customer_id": c.customer_id, "customer_name": customer.full_name, "status": c.status, "created_at": c.created_at, "reviewed_by": c.reviewed_by, "reviewed_at": c.reviewed_at} for c, customer in rows]
+
+
+@app.patch("/contracts/{contract_id}/review")
+def review_contract(contract_id: int, data: schemas.RecordReview, db: Session = Depends(get_db), manager=Depends(require_roles("manager", "admin"))):
+    contract = db.get(models.Contract, contract_id)
+    if not contract:
+        raise HTTPException(status_code=404, detail="Shartnoma topilmadi")
+    if contract.status != "pending":
+        raise HTTPException(status_code=409, detail="Shartnoma avval ko'rib chiqilgan")
+    contract.status = data.status
+    contract.reviewed_by = manager.id
+    contract.reviewed_at = datetime.now(timezone.utc)
+    add_audit(db, manager.id, "contract_reviewed", f"Kod: {contract.contract_code}; status: {data.status}; izoh: {data.comment or ''}")
+    db.commit()
+    return {"id": contract.id, "status": contract.status}
+
+
+# Chiqim tovarlar
+@app.post("/stock-outs")
+def create_stock_out(data: schemas.StockOutCreate, db: Session = Depends(get_db), user=Depends(require_roles("operator", "manager", "admin"))):
+    contract = db.get(models.Contract, data.contract_id)
+    if not contract:
+        raise HTTPException(status_code=404, detail="Shartnoma topilmadi")
+    if contract.status != "approved":
+        raise HTTPException(status_code=409, detail="Chiqim uchun shartnoma avval tasdiqlangan bo'lishi kerak")
+    item = models.StockOut(contract_id=contract.id, amount=data.amount, status="pending", created_by=user.id)
+    db.add(item)
+    db.flush()
+    add_audit(db, user.id, "stock_out_created", f"Shartnoma: {contract.contract_code}; summa: {data.amount}")
+    db.commit()
+    db.refresh(item)
+    return {"id": item.id, "contract_id": contract.id, "contract_code": contract.contract_code, "customer_name": db.get(models.Customer, contract.customer_id).full_name, "amount": item.amount, "status": item.status, "created_at": item.created_at}
+
+
+@app.get("/stock-outs")
+def list_stock_outs(db: Session = Depends(get_db), user=Depends(require_roles("operator", "manager", "admin"))):
+    rows = db.execute(select(models.StockOut, models.Contract, models.Customer).join(models.Contract, models.StockOut.contract_id == models.Contract.id).join(models.Customer, models.Contract.customer_id == models.Customer.id).order_by(models.StockOut.id.desc())).all()
+    return [{"id": item.id, "contract_id": contract.id, "contract_code": contract.contract_code, "customer_name": customer.full_name, "amount": item.amount, "status": item.status, "created_at": item.created_at} for item, contract, customer in rows]
+
+
+@app.patch("/stock-outs/{item_id}/review")
+def review_stock_out(item_id: int, data: schemas.RecordReview, db: Session = Depends(get_db), manager=Depends(require_roles("manager", "admin"))):
+    item = db.get(models.StockOut, item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Chiqim yozuvi topilmadi")
+    if item.status != "pending":
+        raise HTTPException(status_code=409, detail="Chiqim avval ko'rib chiqilgan")
+    item.status = data.status
+    item.reviewed_by = manager.id
+    item.reviewed_at = datetime.now(timezone.utc)
+    add_audit(db, manager.id, "stock_out_reviewed", f"Chiqim ID: {item.id}; status: {data.status}; izoh: {data.comment or ''}")
+    db.commit()
+    return {"id": item.id, "status": item.status}
+
+
+# Fakturalar
+@app.post("/invoices")
+def create_invoice(data: schemas.InvoiceCreate, db: Session = Depends(get_db), user=Depends(require_roles("operator", "manager", "admin"))):
+    contract = db.get(models.Contract, data.contract_id)
+    if not contract:
+        raise HTTPException(status_code=404, detail="Shartnoma topilmadi")
+    if contract.status != "approved":
+        raise HTTPException(status_code=409, detail="Faktura uchun shartnoma avval tasdiqlangan bo'lishi kerak")
+    invoice = models.Invoice(contract_id=contract.id, supplier=data.supplier, amount=data.amount, status="pending", created_by=user.id)
+    db.add(invoice)
+    db.flush()
+    add_audit(db, user.id, "invoice_created", f"Ta'minotchi: {invoice.supplier}; shartnoma: {contract.contract_code}; summa: {invoice.amount}")
+    db.commit()
+    db.refresh(invoice)
+    return {"id": invoice.id, "supplier": invoice.supplier, "contract_id": contract.id, "contract_code": contract.contract_code, "amount": invoice.amount, "status": invoice.status, "created_at": invoice.created_at}
+
+
+@app.get("/invoices")
+def list_invoices(db: Session = Depends(get_db), user=Depends(require_roles("operator", "manager", "admin"))):
+    rows = db.execute(select(models.Invoice, models.Contract).join(models.Contract, models.Invoice.contract_id == models.Contract.id).order_by(models.Invoice.id.desc())).all()
+    return [{"id": invoice.id, "supplier": invoice.supplier, "contract_id": contract.id, "contract_code": contract.contract_code, "amount": invoice.amount, "status": invoice.status, "created_at": invoice.created_at} for invoice, contract in rows]
+
+
+@app.patch("/invoices/{invoice_id}/review")
+def review_invoice(invoice_id: int, data: schemas.RecordReview, db: Session = Depends(get_db), manager=Depends(require_roles("manager", "admin"))):
+    invoice = db.get(models.Invoice, invoice_id)
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Faktura topilmadi")
+    if invoice.status != "pending":
+        raise HTTPException(status_code=409, detail="Faktura avval ko'rib chiqilgan")
+    invoice.status = data.status
+    invoice.reviewed_by = manager.id
+    invoice.reviewed_at = datetime.now(timezone.utc)
+    add_audit(db, manager.id, "invoice_reviewed", f"Faktura ID: {invoice.id}; status: {data.status}; izoh: {data.comment or ''}")
+    db.commit()
+    return {"id": invoice.id, "status": invoice.status}
+
