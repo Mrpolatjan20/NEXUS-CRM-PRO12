@@ -295,13 +295,22 @@ fun ApiPage(session: Session, page: String, back: () -> Unit) {
         when (page) {
             "customers" -> CustomerForm(
                 close = { dialog = false },
-                save = { name, phone, address, photoData ->
+                save = { name, phone, address, birthDate, passportSeries, passportNumber, pinfl, photoData ->
                     scope.launch {
                         try {
+                            val isoBirthDate = if (birthDate.isBlank()) "" else {
+                                val parts = birthDate.split(".")
+                                if (parts.size == 3 && parts[0].length == 2 && parts[1].length == 2 && parts[2].length == 4)
+                                    parts[2] + "-" + parts[1] + "-" + parts[0]
+                                else ""
+                            }
                             val customerBody = JSONObject()
                                 .put("full_name", name)
                                 .put("phone", phone)
                                 .put("address", if (address.isBlank()) JSONObject.NULL else address)
+                                .put("birth_date", if (isoBirthDate.isBlank()) JSONObject.NULL else isoBirthDate)
+                                .put("passport_number", if (passportSeries.isBlank() && passportNumber.isBlank()) JSONObject.NULL else passportSeries + passportNumber)
+                                .put("pinfl", if (pinfl.isBlank()) JSONObject.NULL else pinfl)
                                 .put("photo_data", if (photoData.isBlank()) JSONObject.NULL else photoData)
                             api("POST", "/customers", session.token, customerBody)
                             dialog = false
@@ -378,6 +387,9 @@ fun CustomerRows(raw: String) {
                     Column {
                         Text("#" + o.optInt("id") + "  " + o.text("full_name"), color = Green, fontWeight = FontWeight.Bold)
                         Text("Telefon: " + o.text("phone"))
+                        Text("Tug‘ilgan sana: " + o.text("birth_date"))
+                        Text("Pasport: " + o.text("passport_number"))
+                        Text("JSHSHIR: " + o.text("pinfl"))
                         Text("Manzil: " + o.text("address"))
                     }
                 }
@@ -487,10 +499,14 @@ fun ReportTile(label: String, value: Int) {
 }
 
 @Composable
-fun CustomerForm(close: () -> Unit, save: (String, String, String, String) -> Unit) {
+fun CustomerForm(close: () -> Unit, save: (String, String, String, String, String, String, String, String) -> Unit) {
     var name by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
     var address by remember { mutableStateOf("") }
+    var birthDate by remember { mutableStateOf("") }
+    var passportSeries by remember { mutableStateOf("") }
+    var passportNumber by remember { mutableStateOf("") }
+    var pinfl by remember { mutableStateOf("") }
     var photoData by remember { mutableStateOf("") }
     var cameraError by remember { mutableStateOf("") }
     val cameraLauncher = rememberLauncherForActivityResult(
@@ -510,10 +526,49 @@ fun CustomerForm(close: () -> Unit, save: (String, String, String, String) -> Un
         onDismissRequest = close,
         title = { Text("Yangi mijoz") },
         text = {
-            Column(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState())) {
-                OutlinedTextField(name, { name = it }, label = { Text("F.I.Sh.") }, singleLine = true)
-                OutlinedTextField(phone, { phone = it }, label = { Text("Telefon") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone), singleLine = true)
-                OutlinedTextField(address, { address = it }, label = { Text("Manzil") })
+            Column(Modifier.heightIn(max = 560.dp).verticalScroll(rememberScrollState())) {
+                OutlinedTextField(name, { name = it }, label = { Text("F.I.Sh.") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(phone, { phone = it }, label = { Text("Telefon") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone), singleLine = true, modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(8.dp))
+                Text("SHAXSIY HUJJAT MA’LUMOTLARI", color = Green, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                OutlinedTextField(
+                    birthDate,
+                    { birthDate = it.filter { ch -> ch.isDigit() || ch == '.' }.take(10) },
+                    label = { Text("Tug‘ilgan sana (KK.OO.YYYY)") },
+                    placeholder = { Text("08.04.2004") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        passportSeries,
+                        { passportSeries = it.uppercase().filter { ch -> ch.isLetter() }.take(2) },
+                        label = { Text("Seriya") },
+                        placeholder = { Text("AA") },
+                        singleLine = true,
+                        modifier = Modifier.weight(0.8f)
+                    )
+                    OutlinedTextField(
+                        passportNumber,
+                        { passportNumber = it.filter(Char::isDigit).take(7) },
+                        label = { Text("Pasport raqami") },
+                        placeholder = { Text("1234567") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                        modifier = Modifier.weight(1.5f)
+                    )
+                }
+                OutlinedTextField(
+                    pinfl,
+                    { pinfl = it.filter(Char::isDigit).take(14) },
+                    label = { Text("JSHSHIR (14 raqam)") },
+                    placeholder = { Text("14 xonali raqam") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(address, { address = it }, label = { Text("Manzil") }, modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(10.dp))
                 if (photoData.isNotBlank()) {
                     val preview = remember(photoData) {
@@ -529,7 +584,17 @@ fun CustomerForm(close: () -> Unit, save: (String, String, String, String) -> Un
                 if (photoData.isNotBlank()) Text("Surat biriktirildi", color = Green)
             }
         },
-        confirmButton = { TextButton(onClick = { if (name.trim().length >= 2 && phone.trim().length >= 7) save(name.trim(), phone.trim(), address.trim(), photoData) }) { Text("Saqlash") } },
+        confirmButton = {
+            TextButton(onClick = {
+                val dateOk = birthDate.isBlank() || Regex("^\\d{2}\\.\\d{2}\\.\\d{4}$").matches(birthDate)
+                val passportOk = (passportSeries.isBlank() && passportNumber.isBlank()) ||
+                    (passportSeries.matches(Regex("^[A-Z]{2}$")) && passportNumber.matches(Regex("^\\d{7}$")))
+                val pinflOk = pinfl.isBlank() || pinfl.matches(Regex("^\\d{14}$"))
+                if (name.trim().length >= 2 && phone.trim().length >= 7 && dateOk && passportOk && pinflOk) {
+                    save(name.trim(), phone.trim(), address.trim(), birthDate, passportSeries, passportNumber, pinfl, photoData)
+                }
+            }) { Text("Saqlash") }
+        },
         dismissButton = { TextButton(onClick = close) { Text("Bekor qilish") } }
     )
 }
