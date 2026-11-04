@@ -50,6 +50,20 @@ jobs:
           echo "KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
           echo "KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
 
+      - name: Download licensed MobileFaceNet model
+        run: |
+          set -euo pipefail
+          mkdir -p android/app/src/main/assets
+          curl -fL --retry 3 \
+            "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models/models/mobile_facenet/releases/v0.65.0/mobile_facenet-tflite-float.zip" \
+            -o "$RUNNER_TEMP/mobile_facenet.zip"
+          unzip -l "$RUNNER_TEMP/mobile_facenet.zip"
+          unzip -o "$RUNNER_TEMP/mobile_facenet.zip" -d "$RUNNER_TEMP/mobile_facenet"
+          MODEL="$(find "$RUNNER_TEMP/mobile_facenet" -type f -name '*.tflite' | head -n 1)"
+          test -n "$MODEL"
+          cp "$MODEL" android/app/src/main/assets/mobilefacenet.tflite
+          test -s android/app/src/main/assets/mobilefacenet.tflite
+
       - name: Build signed release APK
         run: |
           gradle -p android :app:assembleRelease \
