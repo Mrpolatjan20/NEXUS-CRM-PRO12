@@ -908,6 +908,93 @@ fun InvoiceRows(raw: String, session: Session, changed: () -> Unit) {
 }
 
 @Composable
+fun SignatureDialog(title: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+    val points = remember { mutableStateListOf<Offset>() }
+    var padWidth by remember { mutableFloatStateOf(1f) }
+    var padHeight by remember { mutableFloatStateOf(1f) }
+    var problem by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title, color = Green, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Barmog‘ingiz bilan pastdagi maydonga imzo chizing.", color = PrimaryText, fontSize = 13.sp)
+                Canvas(
+                    Modifier.fillMaxWidth().height(170.dp)
+                        .background(Color.White, RoundedCornerShape(10.dp))
+                        .border(1.dp, Color.LightGray, RoundedCornerShape(10.dp))
+                        .pointerInput(Unit) {
+                            detectDragGestures(
+                                onDragStart = { points.add(it) },
+                                onDrag = { change, _ ->
+                                    points.add(change.position)
+                                    change.consume()
+                                }
+                            )
+                        }
+                        .pointerInput(Unit) {
+                            detectTapGestures(onTap = { points.add(it) })
+                        }
+                ) {
+                    padWidth = size.width
+                    padHeight = size.height
+                    points.zipWithNext().forEach { (a, b) ->
+                        drawLine(Color.Black, a, b, strokeWidth = 4f)
+                    }
+                    if (points.size == 1) {
+                        drawCircle(Color.Black, radius = 2.5f, center = points.first())
+                    }
+                }
+                TextButton(onClick = { points.clear(); problem = "" }) { Text("Tozalash") }
+                if (problem.isNotBlank()) Text(problem, color = Color.Red, fontSize = 12.sp)
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (points.size < 3) {
+                        problem = "Avval barmog‘ingiz bilan imzo chizing."
+                    } else {
+                        try {
+                            val bitmap = Bitmap.createBitmap(900, 450, Bitmap.Config.ARGB_8888)
+                            val canvas = android.graphics.Canvas(bitmap)
+                            canvas.drawColor(android.graphics.Color.WHITE)
+                            val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                                color = android.graphics.Color.BLACK
+                                strokeWidth = 8f
+                                style = android.graphics.Paint.Style.STROKE
+                                strokeCap = android.graphics.Paint.Cap.ROUND
+                                strokeJoin = android.graphics.Paint.Join.ROUND
+                            }
+                            val scaleX = 900f / padWidth.coerceAtLeast(1f)
+                            val scaleY = 450f / padHeight.coerceAtLeast(1f)
+                            for (index in 0 until points.lastIndex) {
+                                canvas.drawLine(
+                                    points[index].x * scaleX,
+                                    points[index].y * scaleY,
+                                    points[index + 1].x * scaleX,
+                                    points[index + 1].y * scaleY,
+                                    paint
+                                )
+                            }
+                            val output = ByteArrayOutputStream()
+                            bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)
+                            bitmap.recycle()
+                            onConfirm(Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP))
+                        } catch (e: Exception) {
+                            problem = "Imzoni tayyorlashda xatolik yuz berdi."
+                        }
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Green)
+            ) { Text("Imzoni saqlash") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Bekor qilish") } }
+    )
+}
+
+@Composable
 fun BusinessRecordForm(kind: String, close: () -> Unit, save: (Int, Int, String, String) -> Unit, initialContractCode: String = "", initialAmount: String = "") {
     var customerId by remember { mutableStateOf("") }
     var contractId by remember { mutableStateOf("") }
