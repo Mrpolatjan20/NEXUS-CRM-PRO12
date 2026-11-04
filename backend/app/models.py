@@ -43,6 +43,8 @@ class Customer(Base):
     photo_data: Mapped[str | None] = mapped_column(
         Text, nullable=True
     )
+    offer_accepted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    personal_data_consent: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow
