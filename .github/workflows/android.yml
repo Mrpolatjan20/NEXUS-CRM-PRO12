@@ -1,5 +1,5 @@
 
-name: NEXUS CRM PRO Android Build
+name: Mrpolatjan CRM Android Build
 
 on:
   workflow_dispatch:
@@ -39,10 +39,11 @@ jobs:
 
       - name: Build APK
         run: gradle -p android :app:assembleDebug
+          cp android/app/build/outputs/apk/debug/app-debug.apk android/app/build/outputs/apk/debug/Mrpolatjan-CRM.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: NEXUS-CRM-PRO-APK
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: Mrpolatjan-CRM-APK
+          path: android/app/build/outputs/apk/debug/Mrpolatjan-CRM.apk
           if-no-files-found: error
