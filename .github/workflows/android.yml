@@ -1,19 +1,23 @@
-
-name: Mrpolatjan CRM Android Build
+name: NEXUS CRM Android Release
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
+    inputs:
+      version_name:
+        description: "Ilova versiyasi, masalan 1.0.1"
+        required: true
+        default: "1.0.1"
+      version_code:
+        description: "Android versionCode (har safar oshiring)"
+        required: true
+        default: "2"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  build:
+  release:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -22,29 +26,49 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: "17"
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.9'
+          gradle-version: "8.9"
 
-      - name: Check Android files
+      - name: Prepare signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          test -f android/settings.gradle.kts
-          test -f android/build.gradle.kts
-          test -f android/app/build.gradle.kts
-          test -f android/app/src/main/AndroidManifest.xml
-          test -f android/app/src/main/java/uz/nexus/crm/MainActivity.kt
+          test -n "$KEYSTORE_BASE64"
+          test -n "$KEYSTORE_PASSWORD"
+          test -n "$KEY_ALIAS"
+          test -n "$KEY_PASSWORD"
+          echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/nexus-release.jks"
+          echo "KEYSTORE_FILE=$RUNNER_TEMP/nexus-release.jks" >> "$GITHUB_ENV"
+          echo "KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+          echo "KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
+          echo "KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
 
-      - name: Build APK
+      - name: Build signed release APK
         run: |
-          gradle -p android :app:assembleDebug
-          cp android/app/build/outputs/apk/debug/app-debug.apk android/app/build/outputs/apk/debug/Mrpolatjan-CRM.apk
+          gradle -p android :app:assembleRelease \
+            -PVERSION_NAME="${{ inputs.version_name }}" \
+            -PVERSION_CODE="${{ inputs.version_code }}"
+          mkdir -p release
+          cp android/app/build/outputs/apk/release/app-release.apk release/Mrpolatjan-CRM.apk
 
-      - name: Upload APK
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Mrpolatjan-CRM-APK
-          path: android/app/build/outputs/apk/debug/Mrpolatjan-CRM.apk
+          name: NEXUS-CRM-Release-APK
+          path: release/Mrpolatjan-CRM.apk
           if-no-files-found: error
+
+      - name: Publish GitHub Release with APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ inputs.version_name }}
+          name: NEXUS CRM v${{ inputs.version_name }}
+          files: release/Mrpolatjan-CRM.apk
+          make_latest: true
