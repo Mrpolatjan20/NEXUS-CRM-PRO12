@@ -930,7 +930,11 @@ fun SignatureDialog(title: String, onDismiss: () -> Unit, onConfirm: (String) ->
                         .border(1.dp, Color.LightGray, RoundedCornerShape(10.dp))
                         .pointerInput(Unit) {
                             detectDragGestures(
-                                onDragStart = { points.add(it) },
+                                onDragStart = {
+                                    padWidth = size.width.toFloat()
+                                    padHeight = size.height.toFloat()
+                                    points.add(it)
+                                },
                                 onDrag = { change, _ ->
                                     points.add(change.position)
                                     change.consume()
@@ -938,11 +942,9 @@ fun SignatureDialog(title: String, onDismiss: () -> Unit, onConfirm: (String) ->
                             )
                         }
                         .pointerInput(Unit) {
-                            detectTapGestures(onTap = { points.add(it) })
+                            detectTapGestures(onTap = { padWidth = size.width.toFloat(); padHeight = size.height.toFloat(); points.add(it) })
                         }
                 ) {
-                    padWidth = size.width
-                    padHeight = size.height
                     points.zipWithNext().forEach { (a, b) ->
                         drawLine(Color.Black, a, b, strokeWidth = 4f)
                     }
