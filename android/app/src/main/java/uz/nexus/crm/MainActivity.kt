@@ -155,7 +155,7 @@ data class Session(
     val role: String
 )
 
-private fun secureSessionPrefs(context: Context): android.content.SharedPreferences {
+internal fun secureSessionPrefs(context: Context): android.content.SharedPreferences {
     val masterKey = MasterKey.Builder(context)
         .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
         .build()
