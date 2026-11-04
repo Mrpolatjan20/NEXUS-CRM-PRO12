@@ -96,6 +96,7 @@ class ContractCreate(BaseModel):
 class RecordReview(BaseModel):
     status: Literal["approved", "rejected"]
     comment: str | None = None
+    signature_data: str = Field(min_length=100, max_length=1000000)
 
 
 class StockOutCreate(BaseModel):
