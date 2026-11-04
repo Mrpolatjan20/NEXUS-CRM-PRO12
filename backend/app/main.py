@@ -10,7 +10,7 @@ from fastapi import (
 )
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
-from sqlalchemy import select
+from sqlalchemy import select, inspect, text
 
 from .config import settings
 from .db import Base, engine, get_db
@@ -24,6 +24,11 @@ from .security import (
 
 
 Base.metadata.create_all(bind=engine)
+
+# Existing database uchun mijoz rasmi ustunini qo'shish
+if "photo_data" not in {column["name"] for column in inspect(engine).get_columns("customers")}:
+    with engine.begin() as connection:
+        connection.execute(text("ALTER TABLE customers ADD COLUMN photo_data TEXT"))
 
 app = FastAPI(
     title="NEXUS CRM PRO API",
