@@ -72,14 +72,34 @@ private fun normalizePassportSeries(value: String): String =
         .take(2)
         .joinToString("")
 
-private val Green = Color(0xFF0754C7)
-private val LightGreen = Color(0xFFF1F6FF)
+private val darkMode = mutableStateOf(false)
+private val Green: Color get() = if (darkMode.value) Color(0xFF8AB4FF) else Color(0xFF0754C7)
+private val LightGreen: Color get() = if (darkMode.value) Color(0xFF101827) else Color(0xFFF1F6FF)
+private val CardSurface: Color get() = if (darkMode.value) Color(0xFF1B2638) else Color.White
+private val PrimaryText: Color get() = if (darkMode.value) Color(0xFFE8EEF8) else Color(0xFF10264D)
+private val SecondaryText: Color get() = if (darkMode.value) Color(0xFFB7C3D5) else Color(0xFF657594)
 private const val API_URL = "https://nexus-crm-backend-g8or.onrender.com"
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { MaterialTheme { NexusApp() } }
+        darkMode.value = getSharedPreferences("nexus_settings", MODE_PRIVATE).getBoolean("dark_mode", false)
+        setContent {
+            val dark = darkMode.value
+            MaterialTheme(
+                colorScheme = if (dark) darkColorScheme(
+                    primary = Color(0xFF8AB4FF),
+                    background = Color(0xFF101827),
+                    surface = Color(0xFF1B2638),
+                    onSurface = Color(0xFFE8EEF8)
+                ) else lightColorScheme(
+                    primary = Color(0xFF0754C7),
+                    background = Color(0xFFF1F6FF),
+                    surface = Color.White,
+                    onSurface = Color(0xFF10264D)
+                )
+            ) { NexusApp() }
+        }
     }
 }
 
@@ -176,7 +196,7 @@ fun LoginScreen(onLogin: (Session) -> Unit) {
                     }
                     Spacer(Modifier.width(12.dp))
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("Mrpolatjan", color = Color(0xFF10264D), fontSize = 31.sp, fontWeight = FontWeight.ExtraBold)
+                        Text("Mrpolatjan", color = PrimaryText, fontSize = 31.sp, fontWeight = FontWeight.ExtraBold)
                         Text("CRM", color = Green, fontSize = 19.sp, fontWeight = FontWeight.Bold)
                         Row(
                             verticalAlignment = Alignment.Bottom,
@@ -196,12 +216,12 @@ fun LoginScreen(onLogin: (Session) -> Unit) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    colors = CardDefaults.cardColors(containerColor = CardSurface),
                     elevation = CardDefaults.cardElevation(defaultElevation = 5.dp)
                 ) {
                     Column(Modifier.fillMaxWidth().padding(20.dp)) {
                         Text("Tizimga kirish", color = Color(0xFF10264D), fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                        Text("Davom etish uchun ma’lumotlaringizni kiriting", color = Color.Gray, fontSize = 12.sp)
+                        Text("Davom etish uchun ma’lumotlaringizni kiriting", color = SecondaryText, fontSize = 12.sp)
                         Spacer(Modifier.height(20.dp))
                         OutlinedTextField(
                             value = username,
@@ -262,22 +282,97 @@ fun LoginScreen(onLogin: (Session) -> Unit) {
 
 @Composable
 fun MainDashboard(session: Session, logout: () -> Unit) {
+    val context = LocalContext.current
     var page by remember { mutableStateOf("home") }
+    var menuExpanded by remember { mutableStateOf(false) }
+    var selectedContractCode by remember { mutableStateOf("") }
+
     Column(Modifier.fillMaxSize().background(LightGreen)) {
         Row(
-            Modifier.fillMaxWidth().background(Green).padding(14.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            Modifier.fillMaxWidth().background(Green).padding(horizontal = 10.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(Modifier.weight(1f)) {
-                Text("Mrpolatjan CRM", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
-                Text(session.fullName + " • " + session.role, color = Color.White, fontSize = 12.sp)
+            Box {
+                Text("☰", color = Color.White, fontSize = 27.sp,
+                    modifier = Modifier.clickable { menuExpanded = true }.padding(8.dp))
+                DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+                    DropdownMenuItem(
+                        text = { Text("Sozlamalar") },
+                        onClick = { menuExpanded = false; page = "settings" }
+                    )
+                    DropdownMenuItem(
+                        text = { Text(if (darkMode.value) "☀ Kunduzgi rejim" else "☾ Qorong‘i rejim") },
+                        onClick = {
+                            darkMode.value = !darkMode.value
+                            context.getSharedPreferences("nexus_settings", Context.MODE_PRIVATE)
+                                .edit().putBoolean("dark_mode", darkMode.value).apply()
+                            menuExpanded = false
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Bosh sahifa") },
+                        onClick = { menuExpanded = false; page = "home" }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Chiqish") },
+                        onClick = { menuExpanded = false; logout() }
+                    )
+                }
             }
-            Text("Chiqish", color = Color.White, modifier = Modifier.clickable { logout() }.padding(8.dp))
+            Column(Modifier.weight(1f)) {
+                Text("NEXUS CRM", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 19.sp)
+                Text(session.fullName + " • " + session.role, color = Color.White, fontSize = 11.sp)
+            }
         }
-        if (page == "home") HomePage { page = it }
-        else if (page == "updates") UpdatePage { page = "home" }
-        else ApiPage(session, page) { page = "home" }
+        when (page) {
+            "home" -> HomePage { page = it }
+            "updates" -> UpdatePage { page = "home" }
+            "settings" -> SettingsPage(
+                dark = darkMode.value,
+                onDarkChange = {
+                    darkMode.value = it
+                    context.getSharedPreferences("nexus_settings", Context.MODE_PRIVATE)
+                        .edit().putBoolean("dark_mode", it).apply()
+                },
+                back = { page = "home" }
+            )
+            else -> ApiPage(
+                session = session,
+                page = page,
+                back = { page = "home" },
+                selectedContractCode = selectedContractCode,
+                onOpenStock = { code -> selectedContractCode = code; page = "stock" },
+                onContractCreated = { page = "contracts" }
+            )
+        }
+    }
+}
+
+@Composable
+fun SettingsPage(dark: Boolean, onDarkChange: (Boolean) -> Unit, back: () -> Unit) {
+    Column(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("‹ Orqaga", color = Green, fontWeight = FontWeight.Bold,
+                modifier = Modifier.clickable { back() }.padding(8.dp))
+            Text("Sozlamalar", color = Green, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        }
+        Card(colors = CardDefaults.cardColors(containerColor = CardSurface), shape = RoundedCornerShape(16.dp)) {
+            Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Tashqi ko‘rinish", color = PrimaryText, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                Text("Ilova rang rejimini tanlang", color = SecondaryText, fontSize = 13.sp)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { onDarkChange(false) }, modifier = Modifier.weight(1f)) {
+                        Text("☀ Kunduzgi")
+                    }
+                    Button(onClick = { onDarkChange(true) }, modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = Green)) {
+                        Text("☾ Qorong‘i")
+                    }
+                }
+                Text(if (dark) "Hozir qorong‘i rejim yoqilgan." else "Hozir kunduzgi rejim yoqilgan.",
+                    color = SecondaryText, fontSize = 12.sp)
+            }
+        }
     }
 }
 
@@ -331,7 +426,7 @@ fun UpdatePage(back: () -> Unit) {
         Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp)) {
             Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("NEXUS CRM", color = Green, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                Text("O‘rnatilgan versiya: $currentVersion", color = Color.DarkGray)
+                Text("O‘rnatilgan versiya: $currentVersion", color = PrimaryText)
                 if (checking) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(Modifier.size(22.dp), color = Green)
@@ -423,7 +518,7 @@ fun HomePage(open: (String) -> Unit) {
 }
 
 @Composable
-fun ApiPage(session: Session, page: String, back: () -> Unit) {
+fun ApiPage(session: Session, page: String, back: () -> Unit, selectedContractCode: String = "", onOpenStock: (String) -> Unit = {}, onContractCreated: () -> Unit = {}) {
     val title = when (page) {
         "search" -> "Mijoz qidiring"
         "customers" -> "Mijozlar"
@@ -485,14 +580,21 @@ fun ApiPage(session: Session, page: String, back: () -> Unit) {
             when (page) {
                 "customers" -> {
                     ActionButton("＋ Yangi mijoz") { dialog = true }
-                    CustomerRows(raw)
+                    CustomerRows(raw) { customerId ->
+                        scope.launch {
+                            try {
+                                api("POST", "/contracts", session.token, JSONObject().put("customer_id", customerId))
+                                onContractCreated()
+                            } catch (e: Exception) { error = e.message ?: "Shartnoma yaratilmadi" }
+                        }
+                    }
                 }
                 "search" -> {
                     CustomerSearchRows(raw)
                 }
                 "contracts" -> {
                     ActionButton("＋ Shartnomaga so‘rov yuborish") { dialog = true }
-                    ContractRows(raw, session) { refresh++ }
+                    ContractRows(raw, session, { refresh++ }, onOpenStock)
                 }
                 "stock" -> {
                     ActionButton("＋ Chiqim tovar kiritish") { dialog = true }
@@ -561,6 +663,7 @@ fun ApiPage(session: Session, page: String, back: () -> Unit) {
             )
             "stock" -> BusinessRecordForm(
                 kind = "stock",
+                initialContractCode = selectedContractCode,
                 close = { dialog = false },
                 save = { _, contractId, amount, _ ->
                     scope.launch {
@@ -628,7 +731,7 @@ fun MessageCard(message: String) {
 }
 
 @Composable
-fun ContractRows(raw: String, session: Session, changed: () -> Unit) {
+fun ContractRows(raw: String, session: Session, changed: () -> Unit, onOpenStock: (String) -> Unit = {}) {
     val arr = remember(raw) { JSONArray(raw) }
     val scope = rememberCoroutineScope()
     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -651,6 +754,14 @@ fun ContractRows(raw: String, session: Session, changed: () -> Unit) {
                             OutlinedButton(onClick={ scope.launch { try { api("PATCH","/contracts/$id/review",session.token,JSONObject().put("status","rejected")); changed() } catch(_:Exception){} } }) { Text("Rad etish") }
                         }
                     }
+                    if (status == "approved") {
+                        Spacer(Modifier.height(8.dp))
+                        Button(
+                            onClick = { onOpenStock(o.text("contract_code")) },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = Green)
+                        ) { Text("📦 Chiqimga o‘tish") }
+                    }
                 }
             }
         }
@@ -665,9 +776,9 @@ fun StockRows(raw: String, session: Session, changed: () -> Unit) {
         if(arr.length()==0) item { MessageCard("Hozircha chiqim tovarlar yo‘q.") }
         items((0 until arr.length()).toList()) { i ->
             val o=arr.getJSONObject(i); val id=o.optInt("id"); val status=o.text("status")
-            Card(Modifier.fillMaxWidth(), colors=CardDefaults.cardColors(containerColor=Color.White), shape=RoundedCornerShape(14.dp)) {
+            Card(Modifier.fillMaxWidth(), colors=CardDefaults.cardColors(containerColor=CardSurface), shape=RoundedCornerShape(14.dp)) {
                 Column(Modifier.padding(14.dp)) {
-                    Text("Mijozning F.I.O si:", color=Color.Gray, fontSize=12.sp)
+                    Text("Mijozning F.I.O si:", color=SecondaryText, fontSize=12.sp)
                     Text(o.text("customer_name"), color=Green, fontWeight=FontWeight.Bold)
                     Text("Shartnoma kodi: " + o.text("contract_code"))
                     Text("Summa: " + String.format("%,.0f",o.optDouble("amount")) + " UZS")
@@ -712,12 +823,13 @@ fun InvoiceRows(raw: String, session: Session, changed: () -> Unit) {
 }
 
 @Composable
-fun BusinessRecordForm(kind: String, close: () -> Unit, save: (Int, Int, String, String) -> Unit) {
+fun BusinessRecordForm(kind: String, close: () -> Unit, save: (Int, Int, String, String) -> Unit, initialContractCode: String = "") {
     var customerId by remember { mutableStateOf("") }
     var contractId by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
     var supplier by remember { mutableStateOf("") }
     var problem by remember { mutableStateOf("") }
+    LaunchedEffect(initialContractCode) { if (initialContractCode.isNotBlank()) contractId = initialContractCode.filter(Char::isDigit) }
     val isContract=kind=="contract"
     val isStock=kind=="stock"
     val title=if(isContract) "Shartnomaga so‘rov" else if(isStock) "Chiqim tovar" else "Yangi faktura"
@@ -791,7 +903,7 @@ fun CustomerSearchRows(raw: String) {
 }
 
 @Composable
-fun CustomerRows(raw: String) {
+fun CustomerRows(raw: String, onCreateContract: (Int) -> Unit = {}) {
     val arr = remember(raw) { JSONArray(raw) }
     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (arr.length() == 0) item { MessageCard("Hozircha mijozlar yo‘q.") }
@@ -820,6 +932,12 @@ fun CustomerRows(raw: String) {
                         Text("Pasport: " + o.text("passport_number"))
                         Text("JSHSHIR: " + o.text("pinfl"))
                         Text("Manzil: " + o.text("address"))
+                        Spacer(Modifier.height(8.dp))
+                        Button(
+                            onClick = { onCreateContract(o.optInt("id")) },
+                            colors = ButtonDefaults.buttonColors(containerColor = Green),
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("📄 Shartnoma yaratish") }
                     }
                 }
             }
