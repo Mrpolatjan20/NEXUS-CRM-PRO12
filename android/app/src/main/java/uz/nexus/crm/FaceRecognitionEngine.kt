@@ -41,7 +41,7 @@ class FaceRecognitionEngine(
             "Yuz modeli FLOAT32 formatida bo‘lishi kerak."
         }
         val shape = inputTensor.shape()
-        require(shape.size == 4 && shape[1] == INPUT_SIZE && shape[2] == INPUT_SIZE && shape[3] == 3) {
+        require(shape.size == 4 && shape[0] == 1 && shape[1] == INPUT_SIZE && shape[2] == INPUT_SIZE && shape[3] == 3) {
             "MobileFaceNet modeli [1,112,112,3] formatida bo‘lishi kerak."
         }
 
@@ -58,9 +58,13 @@ class FaceRecognitionEngine(
         }
         input.rewind()
 
-        val outputShape = interpreter.getOutputTensor(0).shape()
-        require(outputShape.isNotEmpty() && outputShape.last() == 128) {
-            "Model 128 o‘lchamli yuz vektorini qaytarishi kerak."
+        val outputTensor = interpreter.getOutputTensor(0)
+        val outputShape = outputTensor.shape()
+        require(outputTensor.dataType() == org.tensorflow.lite.DataType.FLOAT32) {
+            "Yuz modeli chiqishi FLOAT32 formatida bo‘lishi kerak."
+        }
+        require(outputShape.contentEquals(intArrayOf(1, 128))) {
+            "Model chiqishi [1,128] formatida bo‘lishi kerak."
         }
         val outputSize = outputShape.last()
         val output = Array(1) { FloatArray(outputSize) }
