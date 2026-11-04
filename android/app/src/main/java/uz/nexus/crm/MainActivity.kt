@@ -407,7 +407,7 @@ fun ApiPage(session: Session, page: String, back: () -> Unit) {
                 }
                 "employees" -> {
                     ActionButton("＋ Xodim qo‘shish") { dialog = true }
-                    EmployeeRows(raw)
+                    EmployeeRows(raw, session) { refresh++ }
                 }
                 "audit" -> AuditRows(raw)
                 "reports" -> ReportRows(raw)
@@ -950,14 +950,99 @@ fun ApplicationRows(raw: String, session: Session, changed: () -> Unit) {
 }
 
 @Composable
-fun EmployeeRows(raw: String) {
+fun EmployeeRows(raw: String, session: Session, changed: () -> Unit) {
     val arr = remember(raw) { JSONArray(raw) }
+    val scope = rememberCoroutineScope()
+    var selected by remember { mutableStateOf<JSONObject?>(null) }
     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (arr.length() == 0) item { MessageCard("Xodimlar topilmadi.") }
         items((0 until arr.length()).toList()) { i ->
             val o = arr.getJSONObject(i)
-            MessageCard(o.text("full_name") + "\nLogin: " + o.text("username") + "\nRol: " + o.text("role"))
+            val active = o.optBoolean("is_active", true)
+            Card(Modifier.fillMaxWidth().clickable { selected = JSONObject(o.toString()) },
+                colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(14.dp)) {
+                Column(Modifier.padding(14.dp)) {
+                    Text(o.text("full_name"), color = Green, fontWeight = FontWeight.Bold)
+                    Text("Login: " + o.text("username"))
+                    Text("Rol: " + o.text("role"))
+                    Text(if (active) "Holat: Faol" else "Holat: Arxivlangan",
+                        color = if (active) Green else Color(0xFFB45309), fontWeight = FontWeight.SemiBold)
+                    Text("Boshqarish uchun bosing", color = Color.Gray, fontSize = 11.sp)
+                }
+            }
         }
+    }
+    selected?.let { employee ->
+        var name by remember(employee) { mutableStateOf(employee.text("full_name")) }
+        var login by remember(employee) { mutableStateOf(employee.text("username")) }
+        var role by remember(employee) { mutableStateOf(employee.text("role")) }
+        var newPassword by remember(employee) { mutableStateOf("") }
+        var busy by remember(employee) { mutableStateOf(false) }
+        var localError by remember(employee) { mutableStateOf("") }
+        val id = employee.optInt("id")
+        val active = employee.optBoolean("is_active", true)
+        AlertDialog(
+            onDismissRequest = { if (!busy) selected = null },
+            title = { Text("Xodimni boshqarish") },
+            text = {
+                Column(Modifier.fillMaxWidth().heightIn(max = 520.dp).verticalScroll(rememberScrollState())) {
+                    Text("Xodim ID: #$id", color = Color.Gray, fontSize = 12.sp)
+                    OutlinedTextField(name, { name = it }, label = { Text("F.I.Sh.") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(login, { login = it }, label = { Text("Login") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    Spacer(Modifier.height(8.dp))
+                    Text("Lavozim", fontWeight = FontWeight.SemiBold)
+                    listOf("operator", "manager", "admin").forEach { item ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(selected = role == item, onClick = { role = item })
+                            Text(item)
+                        }
+                    }
+                    Divider()
+                    OutlinedTextField(newPassword, { newPassword = it },
+                        label = { Text("Yangi parol (ixtiyoriy)") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        singleLine = true, modifier = Modifier.fillMaxWidth())
+                    Text("Parolni o‘zgartirmasangiz, maydonni bo‘sh qoldiring.", color = Color.Gray, fontSize = 11.sp)
+                    if (localError.isNotBlank()) Text(localError, color = Color.Red, fontSize = 12.sp)
+                }
+            },
+            confirmButton = {
+                Column(horizontalAlignment = Alignment.End) {
+                    TextButton(enabled = !busy, onClick = {
+                        if (name.trim().length < 2 || login.trim().length < 3) localError = "F.I.Sh. va loginni tekshiring."
+                        else if (newPassword.isNotBlank() && newPassword.length < 8) localError = "Yangi parol kamida 8 belgidan iborat bo‘lsin."
+                        else {
+                            busy = true
+                            scope.launch {
+                                try {
+                                    api("PATCH", "/users/$id", session.token,
+                                        JSONObject().put("full_name", name.trim()).put("username", login.trim()).put("role", role))
+                                    if (newPassword.isNotBlank()) api("PATCH", "/users/$id/password", session.token,
+                                        JSONObject().put("new_password", newPassword))
+                                    selected = null
+                                    changed()
+                                } catch (e: Exception) {
+                                    localError = e.message ?: "Saqlashda xato"
+                                } finally { busy = false }
+                            }
+                        }
+                    }) { Text(if (busy) "Saqlanmoqda..." else "Saqlash") }
+                    TextButton(enabled = !busy, onClick = {
+                        busy = true
+                        scope.launch {
+                            try {
+                                api("PATCH", "/users/$id/status?active=\${!active}", session.token)
+                                selected = null
+                                changed()
+                            } catch (e: Exception) {
+                                localError = e.message ?: "Holatni o‘zgartirib bo‘lmadi"
+                            } finally { busy = false }
+                        }
+                    }) { Text(if (active) "Arxivlash" else "Qayta faollashtirish", color = if (active) Color(0xFFB45309) else Green) }
+                    TextButton(enabled = !busy, onClick = { selected = null }) { Text("Yopish") }
+                }
+            }
+        )
     }
 }
 
