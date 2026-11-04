@@ -222,75 +222,20 @@ fun LoginScreen(onLogin: (Session) -> Unit) {
     var error by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
     var hasSavedLogin by remember { mutableStateOf(false) }
+    var hasFaceTemplate by remember { mutableStateOf(FaceTemplateStore.exists(context)) }
+    var showFaceCamera by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val faceCameraPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) showFaceCamera = true
+        else error = "Yuz orqali kirish uchun kameraga ruxsat bering."
+    }
 
     LaunchedEffect(Unit) {
         hasSavedLogin = try {
             !secureSessionPrefs(context).getString("access_token", null).isNullOrBlank()
         } catch (_: Exception) { false }
-    }
-
-    LaunchedEffect(hasSavedLogin) {
-        val faceEnabled = try {
-            context.getSharedPreferences("nexus_settings", Context.MODE_PRIVATE)
-                .getBoolean("face_login_enabled", false)
-        } catch (_: Exception) { false }
-        if (hasSavedLogin && faceEnabled) {
-            kotlinx.coroutines.delay(500)
-            val savedToken = try {
-                secureSessionPrefs(context).getString("access_token", null)
-            } catch (_: Exception) { null }
-            val activity = context as? FragmentActivity
-            if (!savedToken.isNullOrBlank() && activity != null) {
-                val manager = BiometricManager.from(context)
-                val availability = manager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_WEAK)
-                if (availability == BiometricManager.BIOMETRIC_SUCCESS) {
-                    val prompt = BiometricPrompt(
-                        activity,
-                        ContextCompat.getMainExecutor(context),
-                        object : BiometricPrompt.AuthenticationCallback() {
-                            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-                                super.onAuthenticationSucceeded(result)
-                                scope.launch {
-                                    loading = true
-                                    try {
-                                        val me = JSONObject(api("GET", "/me", savedToken))
-                                        onLogin(Session(savedToken, me.text("username"), me.text("full_name"), me.text("role")))
-                                    } catch (e: Exception) {
-                                        error = e.message ?: "Saqlangan sessiya muddati tugagan. Login-parol bilan qayta kiring."
-                                        try { secureSessionPrefs(context).edit().clear().apply() } catch (_: Exception) {}
-                                        hasSavedLogin = false
-                                    } finally { loading = false }
-                                }
-                            }
-
-                            override fun onAuthenticationError(code: Int, errString: CharSequence) {
-                                super.onAuthenticationError(code, errString)
-                                error = errString.toString()
-                            }
-
-                            override fun onAuthenticationFailed() {
-                                super.onAuthenticationFailed()
-                                error = "Biometrik tasdiqlash amalga oshmadi. Qayta urinib ko‘ring."
-                            }
-                        }
-                    )
-                    val info = BiometricPrompt.PromptInfo.Builder()
-                        .setTitle("NEXUS CRM")
-                        .setSubtitle("Telefoningizda ro‘yxatdan o‘tgan yuz yoki biometrik usul bilan tasdiqlang")
-                        .setNegativeButtonText("Parol bilan kirish")
-                        .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_WEAK)
-                        .build()
-                    prompt.authenticate(info)
-                } else {
-                    error = when (availability) {
-                        BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED -> "Telefon sozlamalarida yuz yoki barmoq izini ro‘yxatdan o‘tkazing."
-                        BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE -> "Telefon ilovalar uchun biometrik kirishni qo‘llab-quvvatlamaydi."
-                        else -> "Biometrik kirish hozircha mavjud emas. Login-parol bilan kiring."
-                    }
-                }
-            }
-        }
     }
 
     Surface(Modifier.fillMaxSize(), color = LightGreen) {
@@ -377,69 +322,30 @@ fun LoginScreen(onLogin: (Session) -> Unit) {
 
                         Button(
                             onClick = {
-                                val savedToken = try { secureSessionPrefs(context).getString("access_token", null) } catch (_: Exception) { null }
+                                val savedToken = try {
+                                    secureSessionPrefs(context).getString("access_token", null)
+                                } catch (_: Exception) { null }
                                 if (savedToken.isNullOrBlank()) {
                                     error = "Avval login va parol bilan bir marta kiring."
+                                } else if (!FaceTemplateStore.exists(context)) {
+                                    hasFaceTemplate = false
+                                    error = "Avval menyudan yuzingizni ro‘yxatdan o‘tkazing."
+                                } else if (androidx.core.content.ContextCompat.checkSelfPermission(
+                                        context, android.Manifest.permission.CAMERA
+                                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                                ) {
+                                    error = ""
+                                    showFaceCamera = true
                                 } else {
-                                    val activity = context as? FragmentActivity
-                                    if (activity == null) {
-                                        error = "Biometrik kirish hozircha ishlamayapti."
-                                    } else {
-                                        val biometricManager = BiometricManager.from(context)
-                                        val availability = biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_WEAK)
-                                        if (availability != BiometricManager.BIOMETRIC_SUCCESS) {
-                                            error = when (availability) {
-                                                BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED -> "Telefon sozlamalarida yuz yoki barmoq izini avval ro‘yxatdan o‘tkazing."
-                                                BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE -> "Bu qurilmada ilovalar uchun biometrik kirish mavjud emas."
-                                                BiometricManager.BIOMETRIC_ERROR_HW_UNAVAILABLE -> "Biometrik sensor hozircha ishlamayapti."
-                                                else -> "Telefon biometrik kirishni qo‘llab-quvvatlamadi. Login-paroldan foydalaning."
-                                            }
-                                        } else {
-                                            val prompt = BiometricPrompt(
-                                                activity,
-                                                ContextCompat.getMainExecutor(context),
-                                                object : BiometricPrompt.AuthenticationCallback() {
-                                                    override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-                                                        super.onAuthenticationSucceeded(result)
-                                                        scope.launch {
-                                                            loading = true
-                                                            try {
-                                                                val me = JSONObject(api("GET", "/me", savedToken))
-                                                                onLogin(Session(savedToken, me.text("username"), me.text("full_name"), me.text("role")))
-                                                            } catch (e: Exception) {
-                                                                error = e.message ?: "Saqlangan kirish muddati tugagan. Login-parol bilan qayta kiring."
-                                                                try { secureSessionPrefs(context).edit().clear().apply() } catch (_: Exception) {}
-                                                                hasSavedLogin = false
-                                                            } finally { loading = false }
-                                                        }
-                                                    }
-                                                    override fun onAuthenticationError(code: Int, errString: CharSequence) {
-                                                        super.onAuthenticationError(code, errString)
-                                                        error = errString.toString()
-                                                    }
-                                                    override fun onAuthenticationFailed() {
-                                                        super.onAuthenticationFailed()
-                                                        error = "Yuz tasdiqlanmadi. Qayta urinib ko‘ring."
-                                                    }
-                                                }
-                                            )
-                                            val promptInfo = BiometricPrompt.PromptInfo.Builder()
-                                                .setTitle("NEXUS CRM")
-                                                .setSubtitle("Yuzingiz yoki telefon biometrik usuli bilan tasdiqlang")
-                                                .setNegativeButtonText("Bekor qilish")
-                                                .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_WEAK)
-                                                .build()
-                                            prompt.authenticate(promptInfo)
-                                        }
-                                    }
+                                    faceCameraPermission.launch(android.Manifest.permission.CAMERA)
                                 }
                             },
-                            enabled = !loading && hasSavedLogin,
+                            enabled = !loading && hasSavedLogin && hasFaceTemplate,
                             modifier = Modifier.fillMaxWidth().padding(top = 10.dp).height(52.dp),
                             shape = RoundedCornerShape(14.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF153B70))
                         ) {
-                            Text("◉  YUZ ORQALI KIRISH", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            Text("◉  KAMERA ORQALI YUZ BILAN KIRISH", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                         }
                         if (!hasSavedLogin) {
                             Text("Yuz orqali kirish birinchi login-parol kirishidan keyin faollashadi.", color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 8.dp))
@@ -451,6 +357,48 @@ fun LoginScreen(onLogin: (Session) -> Unit) {
                 Spacer(Modifier.height(8.dp))
                 Text("© 2026 Mrpolatjan CRM", color = SecondaryText, fontSize = 11.sp)
             }
+        }
+    }
+    if (showFaceCamera) {
+        Dialog(
+            onDismissRequest = { if (!loading) showFaceCamera = false },
+            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            CameraCaptureScreen(
+                onClose = { if (!loading) showFaceCamera = false },
+                onCaptured = { bitmap ->
+                    showFaceCamera = false
+                    scope.launch {
+                        loading = true
+                        var croppedFace: Bitmap? = null
+                        try {
+                            val savedToken = secureSessionPrefs(context).getString("access_token", null)
+                                ?: throw Exception("Saqlangan sessiya topilmadi. Login-parol bilan kiring.")
+                            val savedEmbedding = FaceTemplateStore.read(context)
+                                ?: throw Exception("Yuz shabloni topilmadi. Qayta ro‘yxatdan o‘tkazing.")
+                            croppedFace = FaceImageProcessor.detectAndCrop(context, bitmap)
+                            val currentEmbedding = withContext(Dispatchers.Default) {
+                                FaceRecognitionEngine.create(context).use { it.createEmbedding(croppedFace!!) }
+                            }
+                            val similarity = FaceRecognitionEngine.create(context).use {
+                                it.cosineSimilarity(savedEmbedding, currentEmbedding)
+                            }
+                            // Experimental threshold; must be calibrated on real devices before production use.
+                            if (similarity < 0.72f) {
+                                throw Exception("Yuz mos kelmadi. Yaxshiroq yorug‘likda qayta urinib ko‘ring yoki login-parol bilan kiring.")
+                            }
+                            val me = JSONObject(api("GET", "/me", savedToken))
+                            onLogin(Session(savedToken, me.text("username"), me.text("full_name"), me.text("role")))
+                        } catch (e: Exception) {
+                            error = e.message ?: "Yuz orqali kirishda xatolik."
+                        } finally {
+                            croppedFace?.recycle()
+                            bitmap.recycle()
+                            loading = false
+                        }
+                    }
+                }
+            )
         }
     }
 }
