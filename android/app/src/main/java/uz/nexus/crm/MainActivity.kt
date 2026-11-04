@@ -76,7 +76,7 @@ private fun JSONObject.text(key: String): String {
     return if (v == "null") "" else v
 }
 
-private data class Session(
+data class Session(
     val token: String,
     val username: String,
     val fullName: String,
