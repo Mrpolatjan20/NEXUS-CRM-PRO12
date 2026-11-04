@@ -277,15 +277,19 @@ fun MainDashboard(session: Session, logout: () -> Unit) {
 @Composable
 fun HomePage(open: (String) -> Unit) {
     val menu = listOf(
+        "search" to "Mijoz qidiring",
         "customers" to "Mijozlar",
+        "contracts" to "Shartnomalar",
+        "stock" to "Chiqim tovar",
+        "invoices" to "Fakturalar",
         "applications" to "Arizalar",
         "employees" to "Xodimlar",
         "reports" to "Hisobotlar",
         "audit" to "Faoliyat tarixi"
     )
     Column(Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
-        Text("Boshqaruv paneli", color = Green, fontSize = 23.sp, fontWeight = FontWeight.Bold)
-        Text("Kerakli bo‘limni tanlang", color = Color.Gray)
+        Text("Bosh sahifa", color = Green, fontSize = 23.sp, fontWeight = FontWeight.Bold)
+        Text("Mijoz va savdo jarayonlarini boshqarish", color = Color.Gray)
         Spacer(Modifier.height(18.dp))
         menu.forEach { item ->
             Card(
@@ -296,7 +300,11 @@ fun HomePage(open: (String) -> Unit) {
                 Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         when (item.first) {
+                            "search" -> "🔎"
                             "customers" -> "👥"
+                            "contracts" -> "📄"
+                            "stock" -> "📦"
+                            "invoices" -> "🧾"
                             "applications" -> "📋"
                             "employees" -> "👨‍💼"
                             "reports" -> "📊"
@@ -316,7 +324,11 @@ fun HomePage(open: (String) -> Unit) {
 @Composable
 fun ApiPage(session: Session, page: String, back: () -> Unit) {
     val title = when (page) {
+        "search" -> "Mijoz qidiring"
         "customers" -> "Mijozlar"
+        "contracts" -> "Shartnomalar"
+        "stock" -> "Chiqim tovar"
+        "invoices" -> "Fakturalar"
         "applications" -> "Arizalar"
         "employees" -> "Xodimlar"
         "reports" -> "Hisobotlar"
@@ -334,13 +346,14 @@ fun ApiPage(session: Session, page: String, back: () -> Unit) {
         error = ""
         try {
             raw = when (page) {
-                "customers" -> api("GET", "/customers", session.token)
+                "customers", "search" -> api("GET", "/customers", session.token)
                 "applications" -> api("GET", "/applications", session.token)
                 "employees" -> api("GET", "/users", session.token)
                 "audit" -> api("GET", "/audit", session.token)
-                else -> JSONObject()
+                "reports" -> JSONObject()
                     .put("customers", JSONArray(api("GET", "/customers", session.token)))
                     .put("applications", JSONArray(api("GET", "/applications", session.token))).toString()
+                else -> "[]"
             }
         } catch (e: Exception) { error = e.message ?: "Ma’lumot yuklanmadi" }
         finally { loading = false }
@@ -370,6 +383,12 @@ fun ApiPage(session: Session, page: String, back: () -> Unit) {
                     ActionButton("＋ Yangi mijoz") { dialog = true }
                     CustomerRows(raw)
                 }
+                "search" -> {
+                    CustomerSearchRows(raw)
+                }
+                "contracts", "stock", "invoices" -> {
+                    MessageCard("Bu bo‘lim Collaborator ma’lumotlari asosida keyingi bosqichda to‘liq ishlab chiqiladi.")
+                }
                 "applications" -> {
                     ActionButton("＋ Yangi ariza") { dialog = true }
                     ApplicationRows(raw, session) { refresh++ }
@@ -388,7 +407,7 @@ fun ApiPage(session: Session, page: String, back: () -> Unit) {
         when (page) {
             "customers" -> CustomerForm(
                 close = { dialog = false },
-                save = { name, phone, address, birthDate, passportSeries, passportNumber, pinfl, photoData ->
+                save = { name, phone, address, birthDate, passportSeries, passportNumber, pinfl, photoData, offerAccepted, personalDataConsent ->
                     scope.launch {
                         try {
                             val isoBirthDate = if (birthDate.isBlank()) "" else {
@@ -405,6 +424,8 @@ fun ApiPage(session: Session, page: String, back: () -> Unit) {
                                 .put("passport_number", if (passportSeries.isBlank() && passportNumber.isBlank()) JSONObject.NULL else passportSeries + passportNumber)
                                 .put("pinfl", if (pinfl.isBlank()) JSONObject.NULL else pinfl)
                                 .put("photo_data", if (photoData.isBlank()) JSONObject.NULL else photoData)
+                                .put("offer_accepted", offerAccepted)
+                                .put("personal_data_consent", personalDataConsent)
                             api("POST", "/customers", session.token, customerBody)
                             dialog = false
                             refresh++
@@ -451,6 +472,50 @@ fun ActionButton(label: String, action: () -> Unit) {
 fun MessageCard(message: String) {
     Card(Modifier.fillMaxWidth().padding(vertical = 5.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
         Text(message, Modifier.padding(16.dp), color = Color.DarkGray)
+    }
+}
+
+@Composable
+fun CustomerSearchRows(raw: String) {
+    var query by remember { mutableStateOf("") }
+    val customers = remember(raw) {
+        try { JSONArray(raw) } catch (_: Exception) { JSONArray() }
+    }
+    Column(Modifier.fillMaxSize()) {
+        OutlinedTextField(
+            value = query,
+            onValueChange = { query = it },
+            label = { Text("Mijozni qidiring") },
+            placeholder = { Text("F.I.Sh., telefon yoki pasport") },
+            modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
+            singleLine = true,
+            shape = RoundedCornerShape(14.dp)
+        )
+        val matches = (0 until customers.length()).map { customers.getJSONObject(it) }.filter { item ->
+            val text = listOf(item.optString("full_name"), item.optString("phone"), item.optString("passport_number"), item.optString("pinfl"))
+                .joinToString(" ").lowercase()
+            text.contains(query.trim().lowercase())
+        }
+        if (matches.isEmpty()) {
+            MessageCard(if (query.isBlank()) "Hozircha mijozlar yo‘q." else "Mos mijoz topilmadi.")
+        } else {
+            LazyColumn {
+                items(matches) { item ->
+                    Card(
+                        Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        shape = RoundedCornerShape(14.dp)
+                    ) {
+                        Column(Modifier.padding(14.dp)) {
+                            Text(item.optString("full_name"), color = Green, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            Text(item.optString("phone"), color = Color.DarkGray, fontSize = 13.sp)
+                            val passport = item.optString("passport_number")
+                            if (passport.isNotBlank() && passport != "null") Text("Pasport: $passport", color = Color.Gray, fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -592,8 +657,10 @@ fun ReportTile(label: String, value: Int) {
 }
 
 @Composable
-fun CustomerForm(close: () -> Unit, save: (String, String, String, String, String, String, String, String) -> Unit) {
+fun CustomerForm(close: () -> Unit, save: (String, String, String, String, String, String, String, String, Boolean, Boolean) -> Unit) {
     var name by remember { mutableStateOf("") }
+    var offerAccepted by remember { mutableStateOf(false) }
+    var personalDataConsent by remember { mutableStateOf(false) }
     var phone by remember { mutableStateOf("") }
     var address by remember { mutableStateOf("") }
     var birthDate by remember { mutableStateOf("") }
@@ -718,6 +785,21 @@ fun CustomerForm(close: () -> Unit, save: (String, String, String, String, Strin
                             )
                             Spacer(Modifier.height(9.dp))
                             OutlinedTextField(address, { address = it }, label = { Text("Manzil") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(13.dp))
+                            Spacer(Modifier.height(14.dp))
+                            Text("ROZILIK VA OFERTA", color = Green, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Row(verticalAlignment = Alignment.Top) {
+                                Checkbox(checked = offerAccepted, onCheckedChange = { offerAccepted = it })
+                                Column(Modifier.weight(1f).padding(top = 10.dp)) {
+                                    Text("Ommaviy oferta shartlari bilan tanishdim va roziman", fontSize = 13.sp, color = Color(0xFF263650))
+                                }
+                            }
+                            Row(verticalAlignment = Alignment.Top) {
+                                Checkbox(checked = personalDataConsent, onCheckedChange = { personalDataConsent = it })
+                                Column(Modifier.weight(1f).padding(top = 10.dp)) {
+                                    Text("Shaxsga doir ma’lumotlarimni yig‘ish va qayta ishlashga roziman", fontSize = 13.sp, color = Color(0xFF263650))
+                                    Text("Rozilik mijozga tushuntirilgandan keyin belgilanadi.", fontSize = 11.sp, color = Color.Gray)
+                                }
+                            }
                             if (cameraError.isNotBlank()) Text(cameraError, color = Color.Red, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
                         }
                     }
@@ -731,8 +813,8 @@ fun CustomerForm(close: () -> Unit, save: (String, String, String, String, Strin
                             val pinflOk = pinfl.isBlank() || pinfl.matches(Regex("^\\d{14}$"))
                             val nameOk = name.trim().length >= 2
                             val phoneOk = phone.filter(Char::isDigit).length >= 7
-                            if (nameOk && phoneOk && dateOk && passportOk && pinflOk) {
-                                save(name.trim(), phone.trim(), address.trim(), birthDate, normalizedSeries, passportNumber, pinfl, photoData)
+                            if (nameOk && phoneOk && dateOk && passportOk && pinflOk && offerAccepted && personalDataConsent) {
+                                save(name.trim(), phone.trim(), address.trim(), birthDate, normalizedSeries, passportNumber, pinfl, photoData, offerAccepted, personalDataConsent)
                             } else {
                                 cameraError = when {
                                     !nameOk -> "F.I.Sh. kamida 2 ta belgidan iborat bo‘lsin."
@@ -740,6 +822,8 @@ fun CustomerForm(close: () -> Unit, save: (String, String, String, String, Strin
                                     !dateOk -> "Tug‘ilgan sana KK.OO.YYYY formatida bo‘lishi kerak."
                                     !passportOk -> "Pasport seriyasi 2 ta harf, raqami 7 ta raqam bo‘lishi kerak."
                                     !pinflOk -> "JSHSHIR aynan 14 ta raqamdan iborat bo‘lishi kerak."
+                                    !offerAccepted -> "Ommaviy oferta shartlariga rozilikni belgilang."
+                                    !personalDataConsent -> "Shaxsiy ma’lumotlarni qayta ishlashga rozilikni belgilang."
                                     else -> "Ma’lumotlarni tekshiring."
                                 }
                             }
