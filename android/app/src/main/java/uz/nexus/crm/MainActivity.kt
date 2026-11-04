@@ -1941,7 +1941,7 @@ fun CameraCaptureScreen(
             cameraSelector = androidx.camera.core.CameraSelector.DEFAULT_FRONT_CAMERA
             setEnabledUseCases(
                 androidx.camera.view.CameraController.IMAGE_CAPTURE or
-                    if (requireLiveness) androidx.camera.view.CameraController.IMAGE_ANALYSIS else 0
+                    (if (requireLiveness) androidx.camera.view.CameraController.IMAGE_ANALYSIS else 0)
             )
         }
     }
