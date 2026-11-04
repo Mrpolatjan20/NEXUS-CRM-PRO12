@@ -83,3 +83,43 @@ class AuditLog(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow
     )
+
+
+class Contract(Base):
+    __tablename__ = "contracts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    contract_code: Mapped[str] = mapped_column(String(20), unique=True, index=True)
+    customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id"))
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    reviewed_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class StockOut(Base):
+    __tablename__ = "stock_outs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    contract_id: Mapped[int] = mapped_column(ForeignKey("contracts.id"))
+    amount: Mapped[float] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    reviewed_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class Invoice(Base):
+    __tablename__ = "invoices"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    supplier: Mapped[str] = mapped_column(String(200))
+    contract_id: Mapped[int] = mapped_column(ForeignKey("contracts.id"))
+    amount: Mapped[float] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    reviewed_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
