@@ -1031,7 +1031,7 @@ fun EmployeeRows(raw: String, session: Session, changed: () -> Unit) {
                         busy = true
                         scope.launch {
                             try {
-                                api("PATCH", "/users/$id/status?active=\${!active}", session.token)
+                                api("PATCH", "/users/$id/status?active=${!active}", session.token)
                                 selected = null
                                 changed()
                             } catch (e: Exception) {
