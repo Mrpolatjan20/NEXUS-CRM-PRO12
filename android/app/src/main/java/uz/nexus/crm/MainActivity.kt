@@ -5,13 +5,16 @@ import android.app.DownloadManager
 import android.content.Context
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
+import androidx.core.content.ContextCompat
 import android.net.Uri
 import android.os.Environment
 import android.widget.Toast
 import android.graphics.Bitmap
 import android.util.Base64
 import java.io.ByteArrayOutputStream
-import androidx.activity.ComponentActivity
+import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -87,7 +90,7 @@ private val PrimaryText: Color get() = if (darkMode.value) Color(0xFFE8EEF8) els
 private val SecondaryText: Color get() = if (darkMode.value) Color(0xFFB7C3D5) else Color(0xFF657594)
 private const val API_URL = "https://nexus-crm-backend-g8or.onrender.com"
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         darkMode.value = getSharedPreferences("nexus_settings", MODE_PRIVATE).getBoolean("dark_mode", false)
@@ -174,24 +177,14 @@ fun NexusApp() {
 
     LaunchedEffect(Unit) {
         try {
-            val prefs = secureSessionPrefs(context)
-            val savedToken = prefs.getString("access_token", null)
-            if (!savedToken.isNullOrBlank()) {
-                val me = JSONObject(api("GET", "/me", savedToken))
-                session = Session(
-                    savedToken,
-                    me.text("username"),
-                    me.text("full_name"),
-                    me.text("role")
-                )
-            }
+            // Keep the saved token for biometric login, but do not bypass the login screen.
+            secureSessionPrefs(context).getString("access_token", null)
         } catch (_: Exception) {
             try { secureSessionPrefs(context).edit().clear().apply() } catch (_: Exception) {}
-            session = null
         } finally {
             restoring = false
         }
-        kotlinx.coroutines.delay(1500)
+        kotlinx.coroutines.delay(1200)
         splash = false
     }
 
@@ -203,9 +196,9 @@ fun NexusApp() {
                 CircularProgressIndicator(color = Color.White)
             }
         }
-    } else {
-        if (session == null) {
-            LoginScreen { loggedIn ->
+    } else if (session == null) {
+        LoginScreen(
+            onLogin = { loggedIn ->
                 try {
                     secureSessionPrefs(context).edit()
                         .putString("access_token", loggedIn.token)
@@ -215,22 +208,30 @@ fun NexusApp() {
                 }
                 session = loggedIn
             }
-        } else {
-            MainDashboard(session!!) {
-                try { secureSessionPrefs(context).edit().clear().apply() } catch (_: Exception) {}
-                session = null
-            }
+        )
+    } else {
+        MainDashboard(session!!) {
+            try { secureSessionPrefs(context).edit().clear().apply() } catch (_: Exception) {}
+            session = null
         }
     }
 }
 
 @Composable
 fun LoginScreen(onLogin: (Session) -> Unit) {
+    val context = LocalContext.current
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var error by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
+    var hasSavedLogin by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+
+    LaunchedEffect(Unit) {
+        hasSavedLogin = try {
+            !secureSessionPrefs(context).getString("access_token", null).isNullOrBlank()
+        } catch (_: Exception) { false }
+    }
 
     Surface(Modifier.fillMaxSize(), color = LightGreen) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -238,28 +239,15 @@ fun LoginScreen(onLogin: (Session) -> Unit) {
                 Modifier.fillMaxWidth().padding(horizontal = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Mrpolatjan CRM brend belgisi
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    Box(
-                        Modifier.size(76.dp).background(
-                            Green, RoundedCornerShape(22.dp)
-                        ),
-                        contentAlignment = Alignment.Center
-                    ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+                    Box(Modifier.size(76.dp).background(Green, RoundedCornerShape(22.dp)), contentAlignment = Alignment.Center) {
                         Text("M", color = Color.White, fontSize = 48.sp, fontWeight = FontWeight.Black)
                     }
                     Spacer(Modifier.width(12.dp))
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text("Mrpolatjan", color = PrimaryText, fontSize = 31.sp, fontWeight = FontWeight.ExtraBold)
                         Text("CRM", color = Green, fontSize = 19.sp, fontWeight = FontWeight.Bold)
-                        Row(
-                            verticalAlignment = Alignment.Bottom,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            modifier = Modifier.height(20.dp)
-                        ) {
+                        Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.height(20.dp)) {
                             listOf(8, 12, 16, 20).forEach { h ->
                                 Box(Modifier.width(7.dp).height(h.dp).background(Green, RoundedCornerShape(3.dp)))
                             }
@@ -268,7 +256,7 @@ fun LoginScreen(onLogin: (Session) -> Unit) {
                 }
                 Spacer(Modifier.height(10.dp))
                 Text("CRM – Boshqaruv tizimi", color = SecondaryText, fontSize = 15.sp)
-                Spacer(Modifier.height(34.dp))
+                Spacer(Modifier.height(28.dp))
 
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -277,8 +265,8 @@ fun LoginScreen(onLogin: (Session) -> Unit) {
                     elevation = CardDefaults.cardElevation(defaultElevation = 5.dp)
                 ) {
                     Column(Modifier.fillMaxWidth().padding(20.dp)) {
-                        Text("Tizimga kirish", color = Color(0xFF10264D), fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                        Text("Davom etish uchun ma’lumotlaringizni kiriting", color = SecondaryText, fontSize = 12.sp)
+                        Text("Tizimga kirish", color = PrimaryText, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                        Text("Login-parol yoki yuz orqali kiring", color = SecondaryText, fontSize = 12.sp)
                         Spacer(Modifier.height(20.dp))
                         OutlinedTextField(
                             value = username,
@@ -324,14 +312,84 @@ fun LoginScreen(onLogin: (Session) -> Unit) {
                             colors = ButtonDefaults.buttonColors(containerColor = Green)
                         ) {
                             if (loading) CircularProgressIndicator(Modifier.size(22.dp), color = Color.White)
-                            else Text("KIRISH", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                            else Text("LOGIN VA PAROL BILAN KIRISH", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        Button(
+                            onClick = {
+                                val savedToken = try { secureSessionPrefs(context).getString("access_token", null) } catch (_: Exception) { null }
+                                if (savedToken.isNullOrBlank()) {
+                                    error = "Avval login va parol bilan bir marta kiring."
+                                } else {
+                                    val activity = context as? FragmentActivity
+                                    if (activity == null) {
+                                        error = "Biometrik kirish hozircha ishlamayapti."
+                                    } else {
+                                        val biometricManager = BiometricManager.from(context)
+                                        val availability = biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_WEAK)
+                                        if (availability != BiometricManager.BIOMETRIC_SUCCESS) {
+                                            error = when (availability) {
+                                                BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED -> "Telefon sozlamalarida yuz yoki barmoq izini avval ro‘yxatdan o‘tkazing."
+                                                BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE -> "Bu qurilmada ilovalar uchun biometrik kirish mavjud emas."
+                                                BiometricManager.BIOMETRIC_ERROR_HW_UNAVAILABLE -> "Biometrik sensor hozircha ishlamayapti."
+                                                else -> "Telefon biometrik kirishni qo‘llab-quvvatlamadi. Login-paroldan foydalaning."
+                                            }
+                                        } else {
+                                            val prompt = BiometricPrompt(
+                                                activity,
+                                                ContextCompat.getMainExecutor(context),
+                                                object : BiometricPrompt.AuthenticationCallback() {
+                                                    override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                                                        super.onAuthenticationSucceeded(result)
+                                                        scope.launch {
+                                                            loading = true
+                                                            try {
+                                                                val me = JSONObject(api("GET", "/me", savedToken))
+                                                                onLogin(Session(savedToken, me.text("username"), me.text("full_name"), me.text("role")))
+                                                            } catch (e: Exception) {
+                                                                error = e.message ?: "Saqlangan kirish muddati tugagan. Login-parol bilan qayta kiring."
+                                                                try { secureSessionPrefs(context).edit().clear().apply() } catch (_: Exception) {}
+                                                                hasSavedLogin = false
+                                                            } finally { loading = false }
+                                                        }
+                                                    }
+                                                    override fun onAuthenticationError(code: Int, errString: CharSequence) {
+                                                        super.onAuthenticationError(code, errString)
+                                                        error = errString.toString()
+                                                    }
+                                                    override fun onAuthenticationFailed() {
+                                                        super.onAuthenticationFailed()
+                                                        error = "Yuz tasdiqlanmadi. Qayta urinib ko‘ring."
+                                                    }
+                                                }
+                                            )
+                                            val promptInfo = BiometricPrompt.PromptInfo.Builder()
+                                                .setTitle("NEXUS CRM")
+                                                .setSubtitle("Yuzingiz yoki telefon biometrik usuli bilan tasdiqlang")
+                                                .setNegativeButtonText("Bekor qilish")
+                                                .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_WEAK)
+                                                .build()
+                                            prompt.authenticate(promptInfo)
+                                        }
+                                    }
+                                }
+                            },
+                            enabled = !loading && hasSavedLogin,
+                            modifier = Modifier.fillMaxWidth().padding(top = 10.dp).height(52.dp),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF153B70))
+                        ) {
+                            Text("◉  YUZ ORQALI KIRISH", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        }
+                        if (!hasSavedLogin) {
+                            Text("Yuz orqali kirish birinchi login-parol kirishidan keyin faollashadi.", color = SecondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 8.dp))
                         }
                     }
                 }
                 Spacer(Modifier.height(22.dp))
                 Text("Xavfsiz. Tez. Ishonchli.", color = Green, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(8.dp))
-                Text("© 2026 Mrpolatjan  •  v1.0.0", color = SecondaryText, fontSize = 11.sp)
+                Text("© 2026 Mrpolatjan CRM", color = SecondaryText, fontSize = 11.sp)
             }
         }
     }
