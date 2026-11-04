@@ -365,6 +365,7 @@ fun LoginScreen(onLogin: (Session) -> Unit) {
             properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
         ) {
             CameraCaptureScreen(
+                requireLiveness = true,
                 onClose = { if (!loading) showFaceCamera = false },
                 onCaptured = { bitmap ->
                     showFaceCamera = false
@@ -1926,18 +1927,43 @@ fun CustomerForm(close: () -> Unit, save: (String, String, String, String, Strin
 }
 
 @Composable
-fun CameraCaptureScreen(onClose: () -> Unit, onCaptured: (Bitmap) -> Unit) {
+fun CameraCaptureScreen(
+    onClose: () -> Unit,
+    onCaptured: (Bitmap) -> Unit,
+    requireLiveness: Boolean = false
+) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
-    val controller = remember {
+    var livenessMessage by remember { mutableStateOf("Kameraga qarab, ko‘zingizni ochiq tuting") }
+    var livenessPassed by remember { mutableStateOf(!requireLiveness) }
+    val controller = remember(requireLiveness) {
         androidx.camera.view.LifecycleCameraController(context).apply {
             cameraSelector = androidx.camera.core.CameraSelector.DEFAULT_FRONT_CAMERA
-            setEnabledUseCases(androidx.camera.view.CameraController.IMAGE_CAPTURE)
+            setEnabledUseCases(
+                androidx.camera.view.CameraController.IMAGE_CAPTURE or
+                    if (requireLiveness) androidx.camera.view.CameraController.IMAGE_ANALYSIS else 0
+            )
         }
     }
-    DisposableEffect(lifecycleOwner, controller) {
+    val livenessAnalyzer = remember(requireLiveness) {
+        if (requireLiveness) FaceLivenessAnalyzer(
+            onProgress = { livenessMessage = it },
+            onPassed = { livenessPassed = true }
+        ) else null
+    }
+    DisposableEffect(lifecycleOwner, controller, livenessAnalyzer) {
         controller.bindToLifecycle(lifecycleOwner)
-        onDispose { controller.unbind() }
+        if (livenessAnalyzer != null) {
+            controller.setImageAnalysisAnalyzer(
+                androidx.core.content.ContextCompat.getMainExecutor(context),
+                livenessAnalyzer
+            )
+        }
+        onDispose {
+            controller.clearImageAnalysisAnalyzer()
+            controller.unbind()
+            livenessAnalyzer?.close()
+        }
     }
     Box(Modifier.fillMaxSize().background(Color(0xFF18243D))) {
         AndroidView(
@@ -1956,7 +1982,10 @@ fun CameraCaptureScreen(onClose: () -> Unit, onCaptured: (Bitmap) -> Unit) {
             ) {
                 Text("‹", color = Color.White, fontSize = 34.sp, modifier = Modifier.clickable { onClose() })
                 Spacer(Modifier.width(18.dp))
-                Text("Rasmni tanlang", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+                Text(
+                    if (requireLiveness) "Jonlilik tekshiruvi" else "Rasmni tanlang",
+                    color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.SemiBold
+                )
             }
             Spacer(Modifier.weight(1f))
             Box(
@@ -1965,14 +1994,20 @@ fun CameraCaptureScreen(onClose: () -> Unit, onCaptured: (Bitmap) -> Unit) {
             ) {
                 Box(Modifier.size(278.dp).border(1.dp, Color(0xFF8EB5FF), androidx.compose.foundation.shape.CircleShape))
             }
-            Text("Yuzingizni doira ichiga joylashtiring", color = Color.White, fontSize = 14.sp, modifier = Modifier.padding(top = 24.dp))
+            Text(
+                if (requireLiveness) livenessMessage else "Yuzingizni doira ichiga joylashtiring",
+                color = Color.White, fontSize = 14.sp, modifier = Modifier.padding(horizontal = 22.dp, vertical = 24.dp)
+            )
             Spacer(Modifier.weight(1f))
             Box(
                 Modifier.padding(bottom = 42.dp).size(82.dp)
                     .border(5.dp, Color.White, androidx.compose.foundation.shape.CircleShape)
                     .padding(7.dp)
-                    .background(Green, androidx.compose.foundation.shape.CircleShape)
-                    .clickable {
+                    .background(
+                        if (!requireLiveness || livenessPassed) Green else Color.DarkGray,
+                        androidx.compose.foundation.shape.CircleShape
+                    )
+                    .clickable(enabled = !requireLiveness || livenessPassed) {
                         val photoFile = java.io.File(context.cacheDir, "client_${System.currentTimeMillis()}.jpg")
                         val outputOptions = androidx.camera.core.ImageCapture.OutputFileOptions.Builder(photoFile).build()
                         controller.takePicture(
