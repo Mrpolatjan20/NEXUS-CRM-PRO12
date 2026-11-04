@@ -3,6 +3,8 @@ package uz.nexus.crm
 import android.os.Bundle
 import android.app.DownloadManager
 import android.content.Context
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import android.net.Uri
 import android.os.Environment
 import android.widget.Toast
@@ -150,15 +152,50 @@ data class Session(
     val role: String
 )
 
+private fun secureSessionPrefs(context: Context): android.content.SharedPreferences {
+    val masterKey = MasterKey.Builder(context)
+        .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+        .build()
+    return EncryptedSharedPreferences.create(
+        context,
+        "nexus_secure_session",
+        masterKey,
+        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+    )
+}
+
 @Composable
 fun NexusApp() {
+    val context = LocalContext.current
     var session by remember { mutableStateOf<Session?>(null) }
     var splash by remember { mutableStateOf(true) }
+    var restoring by remember { mutableStateOf(true) }
+
     LaunchedEffect(Unit) {
+        try {
+            val prefs = secureSessionPrefs(context)
+            val savedToken = prefs.getString("access_token", null)
+            if (!savedToken.isNullOrBlank()) {
+                val me = JSONObject(api("GET", "/me", savedToken))
+                session = Session(
+                    savedToken,
+                    me.text("username"),
+                    me.text("full_name"),
+                    me.text("role")
+                )
+            }
+        } catch (_: Exception) {
+            try { secureSessionPrefs(context).edit().clear().apply() } catch (_: Exception) {}
+            session = null
+        } finally {
+            restoring = false
+        }
         kotlinx.coroutines.delay(1500)
         splash = false
     }
-    if (splash) {
+
+    if (splash || restoring) {
         Box(Modifier.fillMaxSize().background(Green), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("Mrpolatjan CRM", color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold)
@@ -167,8 +204,23 @@ fun NexusApp() {
             }
         }
     } else {
-        if (session == null) LoginScreen { session = it }
-        else MainDashboard(session!!) { session = null }
+        if (session == null) {
+            LoginScreen { loggedIn ->
+                try {
+                    secureSessionPrefs(context).edit()
+                        .putString("access_token", loggedIn.token)
+                        .apply()
+                } catch (_: Exception) {
+                    Toast.makeText(context, "Sessiyani saqlab bo‘lmadi", Toast.LENGTH_SHORT).show()
+                }
+                session = loggedIn
+            }
+        } else {
+            MainDashboard(session!!) {
+                try { secureSessionPrefs(context).edit().clear().apply() } catch (_: Exception) {}
+                session = null
+            }
+        }
     }
 }
 
