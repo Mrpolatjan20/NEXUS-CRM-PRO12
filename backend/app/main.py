@@ -280,6 +280,50 @@ def list_users(
     ).all()
 
 
+
+# Administrator uchun xodim hisoblarini boshqarish.
+# Hisobni butunlay o'chirish o'rniga arxivlaymiz: kerak bo'lsa qaytarish mumkin.
+@app.patch("/users/{user_id}")
+def update_user(user_id: int, data: schemas.UserAdminUpdate, db: Session = Depends(get_db), admin=Depends(require_roles("admin"))):
+    target = db.get(models.User, user_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="Xodim topilmadi")
+    values = data.model_dump(exclude_unset=True)
+    if "username" in values and values["username"] != target.username:
+        exists = db.scalar(select(models.User).where(models.User.username == values["username"]))
+        if exists:
+            raise HTTPException(status_code=409, detail="Login band")
+    for key, value in values.items():
+        if value is not None:
+            setattr(target, key, value)
+    add_audit(db, admin.id, "user_updated", f"Xodim ID: {target.id}; maydonlar: {', '.join(values.keys())}")
+    db.commit()
+    db.refresh(target)
+    return {"id": target.id, "full_name": target.full_name, "username": target.username, "role": target.role, "is_active": target.is_active}
+
+@app.patch("/users/{user_id}/password")
+def change_user_password(user_id: int, data: schemas.UserPasswordUpdate, db: Session = Depends(get_db), admin=Depends(require_roles("admin"))):
+    target = db.get(models.User, user_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="Xodim topilmadi")
+    target.password_hash = hash_password(data.new_password)
+    add_audit(db, admin.id, "user_password_reset", f"Xodim ID: {target.id}")
+    db.commit()
+    return {"message": "Xodim paroli yangilandi"}
+
+@app.patch("/users/{user_id}/status")
+def set_user_status(user_id: int, active: bool, db: Session = Depends(get_db), admin=Depends(require_roles("admin"))):
+    target = db.get(models.User, user_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="Xodim topilmadi")
+    if target.id == admin.id and not active:
+        raise HTTPException(status_code=400, detail="O'zingizning hisobingizni bloklay olmaysiz")
+    target.is_active = active
+    add_audit(db, admin.id, "user_activated" if active else "user_archived", f"Xodim ID: {target.id}")
+    db.commit()
+    return {"id": target.id, "is_active": target.is_active}
+
+
 # Mijoz yaratish
 @app.post("/customers", response_model=schemas.CustomerOut)
 def create_customer(
