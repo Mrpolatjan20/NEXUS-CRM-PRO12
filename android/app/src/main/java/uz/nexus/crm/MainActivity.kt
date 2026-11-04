@@ -1,8 +1,14 @@
 package uz.nexus.crm
 
 import android.os.Bundle
+import android.graphics.Bitmap
+import android.util.Base64
+import java.io.ByteArrayOutputStream
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -17,6 +23,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -288,10 +295,15 @@ fun ApiPage(session: Session, page: String, back: () -> Unit) {
         when (page) {
             "customers" -> CustomerForm(
                 close = { dialog = false },
-                save = { name, phone, address ->
+                save = { name, phone, address, photoData ->
                     scope.launch {
                         try {
-                            api("POST", "/customers", session.token, JSONObject().put("full_name", name).put("phone", phone).put("address", if (address.isBlank()) JSONObject.NULL else address))
+                            val customerBody = JSONObject()
+                                .put("full_name", name)
+                                .put("phone", phone)
+                                .put("address", if (address.isBlank()) JSONObject.NULL else address)
+                                .put("photo_data", if (photoData.isBlank()) JSONObject.NULL else photoData)
+                            api("POST", "/customers", session.token, customerBody)
                             dialog = false
                             refresh++
                         } catch (e: Exception) { error = e.message ?: "Saqlash xatosi"; dialog = false }
@@ -347,7 +359,29 @@ fun CustomerRows(raw: String) {
         if (arr.length() == 0) item { MessageCard("Hozircha mijozlar yo‘q.") }
         items((0 until arr.length()).toList()) { i ->
             val o = arr.getJSONObject(i)
-            MessageCard("#" + o.optInt("id") + "  " + o.text("full_name") + "\nTelefon: " + o.text("phone") + "\nManzil: " + o.text("address"))
+            val photo = o.text("photo_data")
+            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (photo.isNotBlank()) {
+                        val bitmap = remember(photo) {
+                            try {
+                                val bytes = Base64.decode(photo, Base64.DEFAULT)
+                                android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                            } catch (_: Exception) { null }
+                        }
+                        if (bitmap != null) Image(bitmap.asImageBitmap(), contentDescription = "Mijoz surati", modifier = Modifier.size(64.dp))
+                        else Box(Modifier.size(64.dp), contentAlignment = Alignment.Center) { Text("👤") }
+                    } else {
+                        Box(Modifier.size(64.dp), contentAlignment = Alignment.Center) { Text("👤", fontSize = 28.sp) }
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column {
+                        Text("#" + o.optInt("id") + "  " + o.text("full_name"), color = Green, fontWeight = FontWeight.Bold)
+                        Text("Telefon: " + o.text("phone"))
+                        Text("Manzil: " + o.text("address"))
+                    }
+                }
+            }
         }
     }
 }
@@ -453,21 +487,49 @@ fun ReportTile(label: String, value: Int) {
 }
 
 @Composable
-fun CustomerForm(close: () -> Unit, save: (String, String, String) -> Unit) {
+fun CustomerForm(close: () -> Unit, save: (String, String, String, String) -> Unit) {
     var name by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
     var address by remember { mutableStateOf("") }
+    var photoData by remember { mutableStateOf("") }
+    var cameraError by remember { mutableStateOf("") }
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicturePreview()
+    ) { bitmap ->
+        if (bitmap != null) {
+            val scaled = Bitmap.createScaledBitmap(bitmap, minOf(bitmap.width, 640), minOf(bitmap.height, 640), true)
+            val output = ByteArrayOutputStream()
+            scaled.compress(Bitmap.CompressFormat.JPEG, 65, output)
+            photoData = Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP)
+            cameraError = ""
+        } else {
+            cameraError = "Surat olinmadi. Kameraga ruxsat bering."
+        }
+    }
     AlertDialog(
         onDismissRequest = close,
         title = { Text("Yangi mijoz") },
         text = {
-            Column {
+            Column(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState())) {
                 OutlinedTextField(name, { name = it }, label = { Text("F.I.Sh.") }, singleLine = true)
                 OutlinedTextField(phone, { phone = it }, label = { Text("Telefon") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone), singleLine = true)
                 OutlinedTextField(address, { address = it }, label = { Text("Manzil") })
+                Spacer(Modifier.height(10.dp))
+                if (photoData.isNotBlank()) {
+                    val preview = remember(photoData) {
+                        val bytes = Base64.decode(photoData, Base64.DEFAULT)
+                        android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                    }
+                    if (preview != null) Image(preview.asImageBitmap(), contentDescription = "Surat", modifier = Modifier.size(110.dp))
+                }
+                OutlinedButton(onClick = { cameraLauncher.launch(null) }, modifier = Modifier.fillMaxWidth()) {
+                    Text(if (photoData.isBlank()) "📷 Yuzini suratga olish" else "📷 Suratni qayta olish")
+                }
+                if (cameraError.isNotBlank()) Text(cameraError, color = Color.Red)
+                if (photoData.isNotBlank()) Text("Surat biriktirildi", color = Green)
             }
         },
-        confirmButton = { TextButton(onClick = { if (name.trim().length >= 2 && phone.trim().length >= 7) save(name.trim(), phone.trim(), address.trim()) }) { Text("Saqlash") } },
+        confirmButton = { TextButton(onClick = { if (name.trim().length >= 2 && phone.trim().length >= 7) save(name.trim(), phone.trim(), address.trim(), photoData) }) { Text("Saqlash") } },
         dismissButton = { TextButton(onClick = close) { Text("Bekor qilish") } }
     )
 }
