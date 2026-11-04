@@ -750,7 +750,7 @@ fun CameraCaptureScreen(onClose: () -> Unit, onCaptured: (Bitmap) -> Unit) {
     val controller = remember {
         androidx.camera.view.LifecycleCameraController(context).apply {
             cameraSelector = androidx.camera.core.CameraSelector.DEFAULT_FRONT_CAMERA
-            setEnabledUseCases(androidx.camera.view.CameraController.IMAGE_CAPTURE or androidx.camera.view.CameraController.VIDEO_CAPTURE)
+            setEnabledUseCases(androidx.camera.view.CameraController.IMAGE_CAPTURE)
         }
     }
     DisposableEffect(lifecycleOwner, controller) {
