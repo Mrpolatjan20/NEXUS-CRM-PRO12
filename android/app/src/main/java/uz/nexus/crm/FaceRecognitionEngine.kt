@@ -10,7 +10,7 @@ import kotlin.math.sqrt
 /**
  * On-device MobileFaceNet embedding helper.
  *
- * Expected model contract: float32 input [1,112,112,3], RGB values normalized
+ * Expected model contract: float32 input [1,3,112,112] (NCHW), RGB values normalized
  * to [-1,1], and float32 output [1,N]. The model file is intentionally loaded
  * lazily from assets so the app can still start while model packaging is being
  * completed.
@@ -41,8 +41,8 @@ class FaceRecognitionEngine(
             "Yuz modeli FLOAT32 formatida bo‘lishi kerak."
         }
         val shape = inputTensor.shape()
-        require(shape.size == 4 && shape[0] == 1 && shape[1] == INPUT_SIZE && shape[2] == INPUT_SIZE && shape[3] == 3) {
-            "MobileFaceNet modeli [1,112,112,3] formatida bo‘lishi kerak."
+        require(shape.size == 4 && shape[0] == 1 && shape[1] == 3 && shape[2] == INPUT_SIZE && shape[3] == INPUT_SIZE) {
+            "MobileFaceNet modeli [1,3,112,112] formatida bo‘lishi kerak."
         }
 
         val resized = centerSquare(faceBitmap)
@@ -51,11 +51,10 @@ class FaceRecognitionEngine(
             .order(ByteOrder.nativeOrder())
         val pixels = IntArray(INPUT_SIZE * INPUT_SIZE)
         scaled.getPixels(pixels, 0, INPUT_SIZE, 0, 0, INPUT_SIZE, INPUT_SIZE)
-        for (pixel in pixels) {
-            input.putFloat((((pixel shr 16) and 0xFF) / 127.5f) - 1f)
-            input.putFloat((((pixel shr 8) and 0xFF) / 127.5f) - 1f)
-            input.putFloat(((pixel and 0xFF) / 127.5f) - 1f)
-        }
+        // Qualcomm export uses NCHW: write all red, then green, then blue.
+        for (pixel in pixels) input.putFloat((((pixel shr 16) and 0xFF) / 127.5f) - 1f)
+        for (pixel in pixels) input.putFloat((((pixel shr 8) and 0xFF) / 127.5f) - 1f)
+        for (pixel in pixels) input.putFloat(((pixel and 0xFF) / 127.5f) - 1f)
         input.rewind()
 
         val outputTensor = interpreter.getOutputTensor(0)
