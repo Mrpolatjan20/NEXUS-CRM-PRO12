@@ -983,8 +983,8 @@ fun ApiPage(session: Session, page: String, back: () -> Unit, selectedContractCo
                     CustomerRows(raw) { customerId ->
                         scope.launch {
                             try {
-                                api("POST", "/contracts", session.token, JSONObject().put("customer_id", customerId))
-                                onContractCreated()
+                                val createdContract = JSONObject(api("POST", "/contracts", session.token, JSONObject().put("customer_id", customerId)))
+                                onContractCreated(createdContract.text("contract_code"))
                             } catch (e: Exception) { error = e.message ?: "Shartnoma yaratilmadi" }
                         }
                     }
