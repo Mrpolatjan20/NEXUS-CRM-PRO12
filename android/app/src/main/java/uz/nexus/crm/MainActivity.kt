@@ -862,6 +862,8 @@ fun StockRows(raw: String, session: Session, changed: () -> Unit) {
 fun InvoiceRows(raw: String, session: Session, changed: () -> Unit) {
     val arr=remember(raw){JSONArray(raw)}
     val scope=rememberCoroutineScope()
+    var signingId by remember { mutableIntStateOf(0) }
+    var signingStatus by remember { mutableStateOf("approved") }
     LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp)) {
         if(arr.length()==0) item { MessageCard("Hozircha fakturalar yo‘q.") }
         items((0 until arr.length()).toList()) { i ->
@@ -875,13 +877,33 @@ fun InvoiceRows(raw: String, session: Session, changed: () -> Unit) {
                     Text("Status: " + if(status=="approved") "Faktura tasdiqlandi" else if(status=="rejected") "Rad etildi" else "Tasdiqlash kutilmoqda",color=if(status=="approved") Green else Color(0xFF9A6700),fontWeight=FontWeight.SemiBold)
                     if(status=="pending" && (session.role=="manager" || session.role=="admin")) {
                         Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                            Button(onClick={scope.launch{try{api("PATCH","/invoices/$id/review",session.token,JSONObject().put("status","approved"));changed()}catch(_:Exception){}}},colors=ButtonDefaults.buttonColors(containerColor=Green)){Text("Tasdiqlash")}
-                            OutlinedButton(onClick={scope.launch{try{api("PATCH","/invoices/$id/review",session.token,JSONObject().put("status","rejected"));changed()}catch(_:Exception){}}}){Text("Rad etish")}
+                            Button(onClick={ signingId = id; signingStatus = "approved" },colors=ButtonDefaults.buttonColors(containerColor=Green)){Text("✍ Imzo + tasdiqlash")}
+                            OutlinedButton(onClick={ signingId = id; signingStatus = "rejected" }){Text("Imzo + rad etish")}
                         }
                     }
                 }
             }
         }
+    }
+    if (signingId > 0) {
+        SignatureDialog(
+            title = "Faktura bo‘yicha imzo",
+            onDismiss = { signingId = 0 },
+            onConfirm = { signature ->
+                val id = signingId
+                val status = signingStatus
+                signingId = 0
+                scope.launch {
+                    try {
+                        api("PATCH", "/invoices/$id/review", session.token,
+                            JSONObject().put("status", status).put("signature_data", signature))
+                        changed()
+                    } catch (e: Exception) {
+                        android.widget.Toast.makeText(androidx.compose.ui.platform.LocalContext.current, e.message ?: "Tasdiqlash xatosi", android.widget.Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        )
     }
 }
 
