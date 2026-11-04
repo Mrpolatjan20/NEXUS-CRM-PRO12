@@ -353,6 +353,9 @@ fun ApiPage(session: Session, page: String, back: () -> Unit) {
                 "reports" -> JSONObject()
                     .put("customers", JSONArray(api("GET", "/customers", session.token)))
                     .put("applications", JSONArray(api("GET", "/applications", session.token))).toString()
+                "contracts" -> api("GET", "/contracts", session.token)
+                "stock" -> api("GET", "/stock-outs", session.token)
+                "invoices" -> api("GET", "/invoices", session.token)
                 else -> "[]"
             }
         } catch (e: Exception) { error = e.message ?: "Ma’lumot yuklanmadi" }
@@ -386,8 +389,17 @@ fun ApiPage(session: Session, page: String, back: () -> Unit) {
                 "search" -> {
                     CustomerSearchRows(raw)
                 }
-                "contracts", "stock", "invoices" -> {
-                    MessageCard("Bu bo‘lim Collaborator ma’lumotlari asosida keyingi bosqichda to‘liq ishlab chiqiladi.")
+                "contracts" -> {
+                    ActionButton("＋ Shartnomaga so‘rov yuborish") { dialog = true }
+                    ContractRows(raw, session) { refresh++ }
+                }
+                "stock" -> {
+                    ActionButton("＋ Chiqim tovar kiritish") { dialog = true }
+                    StockRows(raw, session) { refresh++ }
+                }
+                "invoices" -> {
+                    ActionButton("＋ Faktura kiritish") { dialog = true }
+                    InvoiceRows(raw, session) { refresh++ }
                 }
                 "applications" -> {
                     ActionButton("＋ Yangi ariza") { dialog = true }
@@ -433,6 +445,45 @@ fun ApiPage(session: Session, page: String, back: () -> Unit) {
                     }
                 }
             )
+            "contracts" -> BusinessRecordForm(
+                kind = "contract",
+                close = { dialog = false },
+                save = { customerId, _, _, _ ->
+                    scope.launch {
+                        try {
+                            api("POST", "/contracts", session.token, JSONObject().put("customer_id", customerId))
+                            dialog = false
+                            refresh++
+                        } catch (e: Exception) { error = e.message ?: "Shartnoma so‘rovi yuborilmadi"; dialog = false }
+                    }
+                }
+            )
+            "stock" -> BusinessRecordForm(
+                kind = "stock",
+                close = { dialog = false },
+                save = { _, contractId, amount, _ ->
+                    scope.launch {
+                        try {
+                            api("POST", "/stock-outs", session.token, JSONObject().put("contract_id", contractId).put("amount", amount.toDouble()))
+                            dialog = false
+                            refresh++
+                        } catch (e: Exception) { error = e.message ?: "Chiqim saqlanmadi"; dialog = false }
+                    }
+                }
+            )
+            "invoices" -> BusinessRecordForm(
+                kind = "invoice",
+                close = { dialog = false },
+                save = { _, contractId, amount, supplier ->
+                    scope.launch {
+                        try {
+                            api("POST", "/invoices", session.token, JSONObject().put("contract_id", contractId).put("amount", amount.toDouble()).put("supplier", supplier))
+                            dialog = false
+                            refresh++
+                        } catch (e: Exception) { error = e.message ?: "Faktura saqlanmadi"; dialog = false }
+                    }
+                }
+            )
             "applications" -> ApplicationForm(
                 close = { dialog = false },
                 save = { customerId, titleText, desc ->
@@ -473,6 +524,125 @@ fun MessageCard(message: String) {
     Card(Modifier.fillMaxWidth().padding(vertical = 5.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
         Text(message, Modifier.padding(16.dp), color = Color.DarkGray)
     }
+}
+
+@Composable
+fun ContractRows(raw: String, session: Session, changed: () -> Unit) {
+    val arr = remember(raw) { JSONArray(raw) }
+    val scope = rememberCoroutineScope()
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (arr.length() == 0) item { MessageCard("Hozircha shartnomalar yo‘q.") }
+        items((0 until arr.length()).toList()) { i ->
+            val o = arr.getJSONObject(i)
+            val id = o.optInt("id")
+            val status = o.text("status")
+            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(14.dp)) {
+                Column(Modifier.padding(14.dp)) {
+                    Text("Mijozning F.I.O si:", color = Color.Gray, fontSize = 12.sp)
+                    Text(o.text("customer_name"), color = Green, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(5.dp))
+                    Text("Shartnoma kodi: " + o.text("contract_code"))
+                    Text("Sanasi: " + o.text("created_at").take(10))
+                    Text("Status: " + when(status) { "approved" -> "Shartnoma tasdiqlangan"; "rejected" -> "Rad etilgan"; else -> "Tasdiqlash kutilmoqda" }, color = if(status=="approved") Green else Color(0xFF9A6700), fontWeight = FontWeight.SemiBold)
+                    if(status=="pending" && (session.role=="manager" || session.role=="admin")) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick={ scope.launch { try { api("PATCH","/contracts/$id/review",session.token,JSONObject().put("status","approved")); changed() } catch(_:Exception){} } }, colors=ButtonDefaults.buttonColors(containerColor=Green)) { Text("Tasdiqlash") }
+                            OutlinedButton(onClick={ scope.launch { try { api("PATCH","/contracts/$id/review",session.token,JSONObject().put("status","rejected")); changed() } catch(_:Exception){} } }) { Text("Rad etish") }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun StockRows(raw: String, session: Session, changed: () -> Unit) {
+    val arr = remember(raw) { JSONArray(raw) }
+    val scope = rememberCoroutineScope()
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if(arr.length()==0) item { MessageCard("Hozircha chiqim tovarlar yo‘q.") }
+        items((0 until arr.length()).toList()) { i ->
+            val o=arr.getJSONObject(i); val id=o.optInt("id"); val status=o.text("status")
+            Card(Modifier.fillMaxWidth(), colors=CardDefaults.cardColors(containerColor=Color.White), shape=RoundedCornerShape(14.dp)) {
+                Column(Modifier.padding(14.dp)) {
+                    Text("Mijozning F.I.O si:", color=Color.Gray, fontSize=12.sp)
+                    Text(o.text("customer_name"), color=Green, fontWeight=FontWeight.Bold)
+                    Text("Shartnoma kodi: " + o.text("contract_code"))
+                    Text("Summa: " + String.format("%,.0f",o.optDouble("amount")) + " UZS")
+                    Text("Status: " + if(status=="approved") "Tasdiqlangan" else if(status=="rejected") "Rad etilgan" else "Tasdiqlash kutilmoqda", color=if(status=="approved") Green else Color(0xFF9A6700), fontWeight=FontWeight.SemiBold)
+                    if(status=="pending" && (session.role=="manager" || session.role=="admin")) {
+                        Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                            Button(onClick={scope.launch{try{api("PATCH","/stock-outs/$id/review",session.token,JSONObject().put("status","approved"));changed()}catch(_:Exception){}}},colors=ButtonDefaults.buttonColors(containerColor=Green)){Text("Tasdiqlash")}
+                            OutlinedButton(onClick={scope.launch{try{api("PATCH","/stock-outs/$id/review",session.token,JSONObject().put("status","rejected"));changed()}catch(_:Exception){}}}){Text("Rad etish")}
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun InvoiceRows(raw: String, session: Session, changed: () -> Unit) {
+    val arr=remember(raw){JSONArray(raw)}
+    val scope=rememberCoroutineScope()
+    LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+        if(arr.length()==0) item { MessageCard("Hozircha fakturalar yo‘q.") }
+        items((0 until arr.length()).toList()) { i ->
+            val o=arr.getJSONObject(i); val id=o.optInt("id"); val status=o.text("status")
+            Card(Modifier.fillMaxWidth(),colors=CardDefaults.cardColors(containerColor=Color.White),shape=RoundedCornerShape(14.dp)) {
+                Column(Modifier.padding(14.dp)) {
+                    Text("Ta’minotchi:",color=Color.Gray,fontSize=12.sp)
+                    Text(o.text("supplier"),color=Green,fontWeight=FontWeight.Bold)
+                    Text("Summa: " + String.format("%,.0f",o.optDouble("amount")) + " UZS")
+                    Text("Shartnoma kodi: " + o.text("contract_code"))
+                    Text("Status: " + if(status=="approved") "Faktura tasdiqlandi" else if(status=="rejected") "Rad etildi" else "Tasdiqlash kutilmoqda",color=if(status=="approved") Green else Color(0xFF9A6700),fontWeight=FontWeight.SemiBold)
+                    if(status=="pending" && (session.role=="manager" || session.role=="admin")) {
+                        Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                            Button(onClick={scope.launch{try{api("PATCH","/invoices/$id/review",session.token,JSONObject().put("status","approved"));changed()}catch(_:Exception){}}},colors=ButtonDefaults.buttonColors(containerColor=Green)){Text("Tasdiqlash")}
+                            OutlinedButton(onClick={scope.launch{try{api("PATCH","/invoices/$id/review",session.token,JSONObject().put("status","rejected"));changed()}catch(_:Exception){}}}){Text("Rad etish")}
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun BusinessRecordForm(kind: String, close: () -> Unit, save: (Int, Int, String, String) -> Unit) {
+    var customerId by remember { mutableStateOf("") }
+    var contractId by remember { mutableStateOf("") }
+    var amount by remember { mutableStateOf("") }
+    var supplier by remember { mutableStateOf("") }
+    var problem by remember { mutableStateOf("") }
+    val isContract=kind=="contract"
+    val isStock=kind=="stock"
+    val title=if(isContract) "Shartnomaga so‘rov" else if(isStock) "Chiqim tovar" else "Yangi faktura"
+    AlertDialog(
+        onDismissRequest=close,
+        title={Text(title,color=Green,fontWeight=FontWeight.Bold)},
+        text={
+            Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                if(isContract) OutlinedTextField(customerId,{customerId=it.filter(Char::isDigit)},label={Text("Mijoz ID raqami")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true)
+                else {
+                    OutlinedTextField(contractId,{contractId=it.filter(Char::isDigit)},label={Text("Shartnoma ID raqami")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true)
+                    OutlinedTextField(amount,{amount=it.filter{ch->ch.isDigit()||ch=='.'}},label={Text("Summa (UZS)")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true)
+                    if(!isStock) OutlinedTextField(supplier,{supplier=it},label={Text("Ta’minotchi nomi")},singleLine=true)
+                }
+                if(problem.isNotBlank()) Text(problem,color=Color.Red,fontSize=12.sp)
+            }
+        },
+        confirmButton={
+            Button(onClick={
+                val valid=if(isContract) customerId.toIntOrNull()!=null else contractId.toIntOrNull()!=null && amount.toDoubleOrNull()!=null && amount.toDoubleOrNull()!!>0 && (isStock || supplier.trim().length>=2)
+                if(valid) save(customerId.toIntOrNull()?:0,contractId.toIntOrNull()?:0,amount,supplier.trim())
+                else problem=if(isContract) "Mijoz ID raqamini kiriting." else "Shartnoma ID, summa va ta’minotchi ma’lumotlarini tekshiring."
+            },colors=ButtonDefaults.buttonColors(containerColor=Green)){Text("Saqlash")}
+        },
+        dismissButton={TextButton(onClick=close){Text("Bekor qilish")}}
+    )
 }
 
 @Composable
