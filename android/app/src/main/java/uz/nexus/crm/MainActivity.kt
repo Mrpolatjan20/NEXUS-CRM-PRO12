@@ -466,6 +466,7 @@ fun MainDashboard(session: Session, logout: () -> Unit) {
                 },
                 back = { page = "home" }
             )
+            "workflow" -> SorovnomaPage(session = session, back = { page = "home" })
             "face_settings" -> FaceLoginSettingsPage(
                 message = faceMessage,
                 back = { page = "home" }
@@ -743,6 +744,176 @@ fun HomePage(open: (String) -> Unit) {
                 }
             }
         }
+    }
+}
+
+
+@Composable
+fun SorovnomaPage(session: Session, back: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    var fullName by remember { mutableStateOf("") }
+    var phone by remember { mutableStateOf("") }
+    var address by remember { mutableStateOf("") }
+    var pinfl by remember { mutableStateOf("") }
+    var passport by remember { mutableStateOf("") }
+    var offer by remember { mutableStateOf(false) }
+    var consent by remember { mutableStateOf(false) }
+    var customerId by remember { mutableIntStateOf(0) }
+    var contractCode by remember { mutableStateOf("") }
+    var contractStatus by remember { mutableStateOf("") }
+    var stockAmount by remember { mutableStateOf("") }
+    var stockStatus by remember { mutableStateOf("") }
+    var supplier by remember { mutableStateOf("") }
+    var invoiceAmount by remember { mutableStateOf("") }
+    var invoiceStatus by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf("") }
+    var refresh by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(refresh, contractCode) {
+        if (contractCode.isNotBlank()) {
+            try {
+                val contracts = JSONArray(api("GET", "/contracts", session.token))
+                for (i in 0 until contracts.length()) {
+                    val item = contracts.getJSONObject(i)
+                    if (item.optString("contract_code") == contractCode) contractStatus = item.optString("status")
+                }
+                val stocks = JSONArray(api("GET", "/stock-outs", session.token))
+                for (i in 0 until stocks.length()) {
+                    val item = stocks.getJSONObject(i)
+                    if (item.optString("contract_code") == contractCode) stockStatus = item.optString("status")
+                }
+                val invoices = JSONArray(api("GET", "/invoices", session.token))
+                for (i in 0 until invoices.length()) {
+                    val item = invoices.getJSONObject(i)
+                    if (item.optString("contract_code") == contractCode) invoiceStatus = item.optString("status")
+                }
+            } catch (e: Exception) { message = e.message ?: "Holatlarni yuklashda xato" }
+        }
+    }
+
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("‹ Orqaga", color = Green, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { back() }.padding(8.dp))
+            Text("So‘rovnoma", color = Green, fontSize = 21.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.weight(1f))
+            Text("↻", color = Green, fontSize = 22.sp, modifier = Modifier.clickable { refresh++ }.padding(8.dp))
+        }
+        Text("Mijoz → Shartnoma → Chiqim → Faktura — hammasi bitta oynada.", color = SecondaryText, fontSize = 12.sp)
+
+        Card(colors = CardDefaults.cardColors(containerColor = CardSurface), shape = RoundedCornerShape(16.dp)) {
+            Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("1. MIJOZ", color = Green, fontWeight = FontWeight.Bold)
+                OutlinedTextField(fullName, { fullName = it }, label = { Text("F.I.Sh.") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(phone, { phone = it }, label = { Text("Telefon raqami") }, modifier = Modifier.fillMaxWidth(), singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone))
+                OutlinedTextField(address, { address = it }, label = { Text("Manzil") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(passport, { passport = it.uppercase().take(9) }, label = { Text("Pasport (AA1234567)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(pinfl, { pinfl = it.filter(Char::isDigit).take(14) }, label = { Text("JSHSHIR (14 raqam)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(checked = offer, onCheckedChange = { offer = it }); Text("Ommaviy oferta shartlariga roziman", color = PrimaryText, fontSize = 12.sp) }
+                Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(checked = consent, onCheckedChange = { consent = it }); Text("Shaxsiy ma’lumotlarni qayta ishlashga roziman", color = PrimaryText, fontSize = 12.sp) }
+                if (customerId > 0) Text("Mijoz saqlandi. ID: $customerId", color = Green, fontWeight = FontWeight.Bold)
+                Button(enabled = !busy && customerId == 0, onClick = {
+                    if (fullName.trim().length < 2 || phone.filter(Char::isDigit).length < 7 || !offer || !consent) {
+                        message = "F.I.Sh., telefon va ikkala rozilikni to‘ldiring."
+                    } else if (pinfl.isNotBlank() && pinfl.length != 14) {
+                        message = "JSHSHIR 14 ta raqam bo‘lishi kerak."
+                    } else if (passport.isNotBlank() && !Regex("^[A-Z]{2}[0-9]{7}$").matches(passport)) {
+                        message = "Pasport AA1234567 ko‘rinishida bo‘lsin."
+                    } else {
+                        busy = true
+                        scope.launch {
+                            try {
+                                val body = JSONObject().put("full_name", fullName.trim()).put("phone", phone.trim())
+                                    .put("address", if (address.isBlank()) JSONObject.NULL else address.trim())
+                                    .put("passport_number", if (passport.isBlank()) JSONObject.NULL else passport)
+                                    .put("pinfl", if (pinfl.isBlank()) JSONObject.NULL else pinfl)
+                                    .put("offer_accepted", offer).put("personal_data_consent", consent)
+                                val result = JSONObject(api("POST", "/customers", session.token, body))
+                                customerId = result.optInt("id")
+                                if (customerId <= 0) throw Exception("Server mijoz ID raqamini qaytarmadi")
+                                message = "Mijoz muvaffaqiyatli saqlandi."
+                            } catch (e: Exception) { message = e.message ?: "Mijoz saqlanmadi" }
+                            finally { busy = false }
+                        }
+                    }
+                }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Green)) { Text("MIJOZNI SAQLASH") }
+            }
+        }
+
+        Card(colors = CardDefaults.cardColors(containerColor = CardSurface), shape = RoundedCornerShape(16.dp)) {
+            Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("2. SHARTNOMA", color = Green, fontWeight = FontWeight.Bold)
+                Text(if (contractCode.isBlank()) "Mijoz saqlangach shartnoma so‘rovi yuboriladi." else "Shartnoma: $contractCode • Holat: $contractStatus", color = SecondaryText)
+                Button(enabled = customerId > 0 && contractCode.isBlank() && !busy, onClick = {
+                    busy = true
+                    scope.launch {
+                        try {
+                            val result = JSONObject(api("POST", "/contracts", session.token, JSONObject().put("customer_id", customerId)))
+                            contractCode = result.optString("contract_code")
+                            contractStatus = result.optString("status")
+                            if (contractCode.isBlank()) throw Exception("Shartnoma kodi qaytmadi")
+                            message = "Shartnoma so‘rovi yuborildi. Tasdiqni kuting."
+                            refresh++
+                        } catch (e: Exception) { message = e.message ?: "Shartnoma yaratilmadi" }
+                        finally { busy = false }
+                    }
+                }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Green)) { Text("SHARTNOMA SO‘ROVINI YUBORISH") }
+            }
+        }
+
+        Card(colors = CardDefaults.cardColors(containerColor = CardSurface), shape = RoundedCornerShape(16.dp)) {
+            Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("3. CHIQIM", color = Green, fontWeight = FontWeight.Bold)
+                Text("Shartnoma holati: " + contractStatus.ifBlank { "—" }, color = SecondaryText)
+                OutlinedTextField(stockAmount, { stockAmount = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("Chiqim summasi (UZS)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+                if (stockStatus.isNotBlank()) Text("Chiqim holati: $stockStatus", color = Green)
+                Button(enabled = contractCode.isNotBlank() && contractStatus == "approved" && stockStatus.isBlank() && !busy, onClick = {
+                    val amount = stockAmount.toDoubleOrNull()
+                    if (amount == null || amount <= 0) message = "Chiqim summasini to‘g‘ri kiriting."
+                    else {
+                        busy = true
+                        scope.launch {
+                            try {
+                                api("POST", "/stock-outs", session.token, JSONObject().put("contract_code", contractCode).put("amount", amount))
+                                stockStatus = "pending"
+                                message = "Chiqim yuborildi. Tasdiqlanishini kuting."
+                                refresh++
+                            } catch (e: Exception) { message = e.message ?: "Chiqim saqlanmadi" }
+                            finally { busy = false }
+                        }
+                    }
+                }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Green)) { Text("CHIQIMNI SAQLASH") }
+            }
+        }
+
+        Card(colors = CardDefaults.cardColors(containerColor = CardSurface), shape = RoundedCornerShape(16.dp)) {
+            Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("4. FAKTURA", color = Green, fontWeight = FontWeight.Bold)
+                Text("Chiqim holati: " + stockStatus.ifBlank { "—" }, color = SecondaryText)
+                OutlinedTextField(supplier, { supplier = it }, label = { Text("Ta’minotchi") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(invoiceAmount, { invoiceAmount = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("Faktura summasi (UZS)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+                if (invoiceStatus.isNotBlank()) Text("Faktura holati: $invoiceStatus", color = Green)
+                Button(enabled = contractCode.isNotBlank() && contractStatus == "approved" && stockStatus == "approved" && invoiceStatus.isBlank() && !busy, onClick = {
+                    val amount = invoiceAmount.toDoubleOrNull()
+                    if (supplier.trim().length < 2 || amount == null || amount <= 0) message = "Ta’minotchi va faktura summasini kiriting."
+                    else {
+                        busy = true
+                        scope.launch {
+                            try {
+                                api("POST", "/invoices", session.token, JSONObject().put("contract_code", contractCode).put("amount", amount).put("supplier", supplier.trim()))
+                                invoiceStatus = "pending"
+                                message = "Faktura yuborildi. Tasdiqlanishini kuting."
+                                refresh++
+                            } catch (e: Exception) { message = e.message ?: "Faktura saqlanmadi" }
+                            finally { busy = false }
+                        }
+                    }
+                }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Green)) { Text("FAKTURANI SAQLASH") }
+            }
+        }
+        if (message.isNotBlank()) MessageCard(message)
+        OutlinedButton(onClick = { refresh++ }, modifier = Modifier.fillMaxWidth()) { Text("TASDIQLASH HOLATLARINI YANGILASH") }
+        Spacer(Modifier.height(18.dp))
     }
 }
 
