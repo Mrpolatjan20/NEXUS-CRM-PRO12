@@ -479,7 +479,7 @@ fun MainDashboard(session: Session, logout: () -> Unit) {
                 onOpenStock = { code -> selectedContractCode = code; page = "stock" },
                 onOpenInvoice = { code, amount -> selectedContractCode = code; selectedStockAmount = amount; page = "invoices" },
                 selectedStockAmount = selectedStockAmount,
-                onContractCreated = { page = "contracts" }
+                onContractCreated = { code -> selectedContractCode = code; page = "contracts" }
             )
         }
     }
@@ -918,7 +918,7 @@ fun SorovnomaPage(session: Session, back: () -> Unit) {
 }
 
 @Composable
-fun ApiPage(session: Session, page: String, back: () -> Unit, selectedContractCode: String = "", onOpenStock: (String) -> Unit = {}, onOpenInvoice: (String, String) -> Unit = { _, _ -> }, selectedStockAmount: String = "", onContractCreated: () -> Unit = {}) {
+fun ApiPage(session: Session, page: String, back: () -> Unit, selectedContractCode: String = "", onOpenStock: (String) -> Unit = {}, onOpenInvoice: (String, String) -> Unit = { _, _ -> }, selectedStockAmount: String = "", onContractCreated: (String) -> Unit = {}) {
     val title = when (page) {
         "workflow", "customers" -> "So‘rovnoma • 1/4 Mijoz"
         "contracts" -> "So‘rovnoma • 2/4 Shartnoma"
@@ -1045,8 +1045,9 @@ fun ApiPage(session: Session, page: String, back: () -> Unit, selectedContractCo
                             val customerId = createdCustomer.optInt("id")
                             if (page == "workflow" && customerId > 0) {
                                 val contract = JSONObject(api("POST", "/contracts", session.token, JSONObject().put("customer_id", customerId)))
-                                selectedContractCode = contract.text("contract_code")
-                                page = "contracts"
+                                onContractCreated(contract.text("contract_code"))
+                                dialog = false
+                                refresh++
                             } else {
                                 dialog = false
                                 refresh++
