@@ -2,7 +2,7 @@
 from datetime import datetime
 from sqlalchemy import (
     Boolean, Date, DateTime, ForeignKey,
-    Integer, String, Text
+    Float, Integer, String, Text
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -103,7 +103,7 @@ class StockOut(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     contract_id: Mapped[int] = mapped_column(ForeignKey("contracts.id"))
-    amount: Mapped[float] = mapped_column(Integer)
+    amount: Mapped[float] = mapped_column(Float)
     status: Mapped[str] = mapped_column(String(20), default="pending")
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
     reviewed_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
@@ -117,7 +117,7 @@ class Invoice(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     supplier: Mapped[str] = mapped_column(String(200))
     contract_id: Mapped[int] = mapped_column(ForeignKey("contracts.id"))
-    amount: Mapped[float] = mapped_column(Integer)
+    amount: Mapped[float] = mapped_column(Float)
     status: Mapped[str] = mapped_column(String(20), default="pending")
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
     reviewed_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
