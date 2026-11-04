@@ -546,7 +546,7 @@ fun FaceLoginSettingsPage(
                 }
                 if (status.isNotBlank()) Text(status, color = Green, fontSize = 13.sp)
                 Text(
-                    "Eslatma: bu bosqich yuzni ro‘yxatdan o‘tkazadi. Kirish tugmasiga ulash va tiriklik tekshiruvi alohida yakunlanadi.",
+                    "Eslatma: kirishda kamera ko‘z yumib-ochish va boshni burish harakatlarini tekshiradi. Bu oddiy suratni qaytarishga qarshi qo‘shimcha tekshiruv, ammo professional anti-spoof himoyasi emas.",
                     color = SecondaryText, fontSize = 11.sp
                 )
             }
