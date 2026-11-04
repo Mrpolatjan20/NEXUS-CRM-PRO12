@@ -282,7 +282,7 @@ fun HomePage(open: (String) -> Unit) {
         "contracts" to "Shartnomalar",
         "stock" to "Chiqim tovar",
         "invoices" to "Fakturalar",
-        "applications" to "Arizalar",
+        "applications" to "Moliyalashtirish arizalari",
         "employees" to "Xodimlar",
         "reports" to "Hisobotlar",
         "audit" to "Faoliyat tarixi"
@@ -329,7 +329,7 @@ fun ApiPage(session: Session, page: String, back: () -> Unit) {
         "contracts" -> "Shartnomalar"
         "stock" -> "Chiqim tovar"
         "invoices" -> "Fakturalar"
-        "applications" -> "Arizalar"
+        "applications" -> "Moliyalashtirish arizalari"
         "employees" -> "Xodimlar"
         "reports" -> "Hisobotlar"
         else -> "Faoliyat tarixi"
