@@ -557,7 +557,7 @@ def create_contract(
 @app.get("/contracts")
 def list_contracts(db: Session = Depends(get_db), user=Depends(require_roles("operator", "manager", "admin"))):
     rows = db.execute(select(models.Contract, models.Customer).join(models.Customer, models.Contract.customer_id == models.Customer.id).order_by(models.Contract.id.desc())).all()
-    return [{"id": c.id, "contract_code": c.contract_code, "customer_id": c.customer_id, "customer_name": customer.full_name, "status": c.status, "created_at": c.created_at, "reviewed_by": c.reviewed_by, "reviewed_at": c.reviewed_at} for c, customer in rows]
+    return [{"id": c.id, "contract_code": c.contract_code, "customer_id": c.customer_id, "customer_name": customer.full_name, "status": c.status, "created_at": c.created_at, "reviewed_by": c.reviewed_by, "reviewed_at": c.reviewed_at, "signature_data": c.signature_data} for c, customer in rows]
 
 
 @app.patch("/contracts/{contract_id}/review")
@@ -590,7 +590,7 @@ def create_stock_out(data: schemas.StockOutCreate, db: Session = Depends(get_db)
     add_audit(db, user.id, "stock_out_created", f"Shartnoma: {contract.contract_code}; summa: {data.amount}")
     db.commit()
     db.refresh(item)
-    return {"id": item.id, "contract_id": contract.id, "contract_code": contract.contract_code, "customer_name": db.get(models.Customer, contract.customer_id).full_name, "amount": item.amount, "status": item.status, "created_at": item.created_at}
+    return {"id": item.id, "contract_id": contract.id, "contract_code": contract.contract_code, "customer_name": db.get(models.Customer, contract.customer_id).full_name, "amount": item.amount, "status": item.status, "created_at": item.created_at, "signature_data": item.signature_data}
 
 
 @app.get("/stock-outs")
@@ -629,7 +629,7 @@ def create_invoice(data: schemas.InvoiceCreate, db: Session = Depends(get_db), u
     add_audit(db, user.id, "invoice_created", f"Ta'minotchi: {invoice.supplier}; shartnoma: {contract.contract_code}; summa: {invoice.amount}")
     db.commit()
     db.refresh(invoice)
-    return {"id": invoice.id, "supplier": invoice.supplier, "contract_id": contract.id, "contract_code": contract.contract_code, "amount": invoice.amount, "status": invoice.status, "created_at": invoice.created_at}
+    return {"id": invoice.id, "supplier": invoice.supplier, "contract_id": contract.id, "contract_code": contract.contract_code, "amount": invoice.amount, "status": invoice.status, "created_at": invoice.created_at, "signature_data": invoice.signature_data}
 
 
 @app.get("/invoices")
