@@ -37,6 +37,9 @@ class FaceRecognitionEngine(
 
     fun createEmbedding(faceBitmap: Bitmap): FloatArray {
         val inputTensor = interpreter.getInputTensor(0)
+        require(inputTensor.dataType() == org.tensorflow.lite.DataType.FLOAT32) {
+            "Yuz modeli FLOAT32 formatida bo‘lishi kerak."
+        }
         val shape = inputTensor.shape()
         require(shape.size == 4 && shape[1] == INPUT_SIZE && shape[2] == INPUT_SIZE && shape[3] == 3) {
             "MobileFaceNet modeli [1,112,112,3] formatida bo‘lishi kerak."
@@ -55,7 +58,11 @@ class FaceRecognitionEngine(
         }
         input.rewind()
 
-        val outputSize = interpreter.getOutputTensor(0).shape().last()
+        val outputShape = interpreter.getOutputTensor(0).shape()
+        require(outputShape.isNotEmpty() && outputShape.last() == 128) {
+            "Model 128 o‘lchamli yuz vektorini qaytarishi kerak."
+        }
+        val outputSize = outputShape.last()
         val output = Array(1) { FloatArray(outputSize) }
         interpreter.run(input, output)
         return l2Normalize(output[0])
