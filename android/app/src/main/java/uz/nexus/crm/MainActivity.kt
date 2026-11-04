@@ -27,8 +27,6 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.foundation.border
 import androidx.compose.ui.window.Dialog
 import androidx.compose.runtime.DisposableEffect
-import androidx.camera.core.ImageProxy
-import androidx.camera.core.toBitmap
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -791,13 +789,19 @@ fun CameraCaptureScreen(onClose: () -> Unit, onCaptured: (Bitmap) -> Unit) {
                     .padding(7.dp)
                     .background(Green, androidx.compose.foundation.shape.CircleShape)
                     .clickable {
+                        val photoFile = java.io.File(context.cacheDir, "client_${System.currentTimeMillis()}.jpg")
+                        val outputOptions = androidx.camera.core.ImageCapture.OutputFileOptions.Builder(photoFile).build()
                         controller.takePicture(
+                            outputOptions,
                             androidx.core.content.ContextCompat.getMainExecutor(context),
-                            object : androidx.camera.core.ImageCapture.OnImageCapturedCallback() {
-                                override fun onCaptureSuccess(image: androidx.camera.core.ImageProxy) {
-                                    try { onCaptured(image.toBitmap()) } finally { image.close() }
+                            object : androidx.camera.core.ImageCapture.OnImageSavedCallback {
+                                override fun onImageSaved(result: androidx.camera.core.ImageCapture.OutputFileResults) {
+                                    val bitmap = android.graphics.BitmapFactory.decodeFile(photoFile.absolutePath)
+                                    photoFile.delete()
+                                    if (bitmap != null) onCaptured(bitmap)
                                 }
                                 override fun onError(exception: androidx.camera.core.ImageCaptureException) {
+                                    photoFile.delete()
                                     android.util.Log.e("MrpolatjanCRM", "Camera capture failed", exception)
                                 }
                             }
