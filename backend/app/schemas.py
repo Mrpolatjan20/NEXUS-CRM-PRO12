@@ -107,3 +107,29 @@ class InvoiceCreate(BaseModel):
     contract_code: str = Field(min_length=4, max_length=20)
     amount: float = Field(gt=0)
     supplier: str = Field(min_length=2, max_length=200)
+
+
+class FinanceProductIn(BaseModel):
+    name: str = Field(min_length=2, max_length=200)
+    category: str = Field(default="", max_length=150)
+    supplier: str = Field(default="", max_length=200)
+    unit_price: float = Field(gt=0)
+    quantity: int = Field(default=1, ge=1, le=10000)
+
+
+class FinanceGuarantorIn(BaseModel):
+    full_name: str = Field(min_length=2, max_length=150)
+    phone: str = Field(min_length=7, max_length=30)
+    passport_number: str = Field(default="", max_length=30)
+
+
+class FinanceApplicationCreate(BaseModel):
+    customer_id: int
+    term_months: int = Field(default=12, ge=1, le=60)
+    products: list[FinanceProductIn] = Field(min_length=1, max_length=30)
+    guarantors: list[FinanceGuarantorIn] = Field(default_factory=list, max_length=5)
+
+
+class FinanceApplicationReview(BaseModel):
+    status: Literal["approved", "rejected"]
+    comment: str | None = None
