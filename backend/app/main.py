@@ -26,9 +26,14 @@ from .security import (
 Base.metadata.create_all(bind=engine)
 
 # Existing database uchun mijoz rasmi ustunini qo'shish
-if "photo_data" not in {column["name"] for column in inspect(engine).get_columns("customers")}:
-    with engine.begin() as connection:
+customer_columns = {column["name"] for column in inspect(engine).get_columns("customers")}
+with engine.begin() as connection:
+    if "photo_data" not in customer_columns:
         connection.execute(text("ALTER TABLE customers ADD COLUMN photo_data TEXT"))
+    if "offer_accepted" not in customer_columns:
+        connection.execute(text("ALTER TABLE customers ADD COLUMN offer_accepted BOOLEAN NOT NULL DEFAULT 0"))
+    if "personal_data_consent" not in customer_columns:
+        connection.execute(text("ALTER TABLE customers ADD COLUMN personal_data_consent BOOLEAN NOT NULL DEFAULT 0"))
 
 app = FastAPI(
     title="NEXUS CRM PRO API",
@@ -282,6 +287,12 @@ def create_customer(
     db: Session = Depends(get_db),
     user=Depends(require_roles("operator", "manager", "admin")),
 ):
+    if not data.offer_accepted or not data.personal_data_consent:
+        raise HTTPException(
+            status_code=400,
+            detail="Ommaviy oferta va shaxsiy ma’lumotlarga rozilik talab qilinadi",
+        )
+
     if data.passport_number:
         exists = db.scalar(
             select(models.Customer).where(
