@@ -210,7 +210,7 @@ fun LoginScreen(onLogin: (Session) -> Unit) {
                     }
                 }
                 Spacer(Modifier.height(10.dp))
-                Text("CRM – Boshqaruv tizimi", color = Color(0xFF52627E), fontSize = 15.sp)
+                Text("CRM – Boshqaruv tizimi", color = SecondaryText, fontSize = 15.sp)
                 Spacer(Modifier.height(34.dp))
 
                 Card(
@@ -274,7 +274,7 @@ fun LoginScreen(onLogin: (Session) -> Unit) {
                 Spacer(Modifier.height(22.dp))
                 Text("Xavfsiz. Tez. Ishonchli.", color = Green, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(8.dp))
-                Text("© 2026 Mrpolatjan  •  v1.0.0", color = Color.Gray, fontSize = 11.sp)
+                Text("© 2026 Mrpolatjan  •  v1.0.0", color = SecondaryText, fontSize = 11.sp)
             }
         }
     }
@@ -423,7 +423,7 @@ fun UpdatePage(back: () -> Unit) {
                 modifier = Modifier.clickable { back() }.padding(8.dp))
             Text("Ilovani yangilash", color = Green, fontSize = 21.sp, fontWeight = FontWeight.Bold)
         }
-        Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp)) {
+        Card(colors = CardDefaults.cardColors(containerColor = CardSurface), shape = RoundedCornerShape(16.dp)) {
             Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("NEXUS CRM", color = Green, fontSize = 22.sp, fontWeight = FontWeight.Bold)
                 Text("O‘rnatilgan versiya: $currentVersion", color = PrimaryText)
@@ -434,7 +434,7 @@ fun UpdatePage(back: () -> Unit) {
                         Text("Yangilanish tekshirilmoqda…")
                     }
                 } else if (latestVersion.isNotBlank() && downloadUrl.isNotBlank()) {
-                    Text("Oxirgi versiya: $latestVersion", color = Color.DarkGray)
+                    Text("Oxirgi versiya: $latestVersion", color = PrimaryText)
                     if (latestVersion != currentVersion) {
                         Text("Yangi versiya mavjud.", color = Green, fontWeight = FontWeight.SemiBold)
                         Button(
@@ -805,7 +805,7 @@ fun InvoiceRows(raw: String, session: Session, changed: () -> Unit) {
             val o=arr.getJSONObject(i); val id=o.optInt("id"); val status=o.text("status")
             Card(Modifier.fillMaxWidth(),colors=CardDefaults.cardColors(containerColor=CardSurface),shape=RoundedCornerShape(14.dp)) {
                 Column(Modifier.padding(14.dp)) {
-                    Text("Ta’minotchi:",color=Color.Gray,fontSize=12.sp)
+                    Text("Ta’minotchi:",color=SecondaryText,fontSize=12.sp)
                     Text(o.text("supplier"),color=Green,fontWeight=FontWeight.Bold)
                     Text("Summa: " + String.format("%,.0f",o.optDouble("amount")) + " UZS")
                     Text("Shartnoma kodi: " + o.text("contract_code"))
@@ -965,9 +965,9 @@ fun FinanceApplicationForm(close: () -> Unit, save: (JSONObject) -> Unit) {
     var problem by remember { mutableStateOf("") }
     val products = remember { mutableStateListOf(FinanceProductDraft()) }
     Dialog(onDismissRequest = close, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
-        Surface(Modifier.fillMaxSize(), color = Color(0xFFF4F7FF)) {
+        Surface(Modifier.fillMaxSize(), color = LightGreen) {
             Column(Modifier.fillMaxSize()) {
-                Row(Modifier.fillMaxWidth().background(Color.White).padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().background(CardSurface).padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("‹", color = Green, fontSize = 30.sp, modifier = Modifier.clickable { close() })
                     Spacer(Modifier.width(12.dp))
                     Column {
@@ -979,7 +979,7 @@ fun FinanceApplicationForm(close: () -> Unit, save: (JSONObject) -> Unit) {
                     OutlinedTextField(customerId, { customerId = it.filter(Char::isDigit) }, label = { Text("Mijoz ID raqami") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth(), singleLine = true)
                     Text("TOVARLAR", color = Green, fontWeight = FontWeight.Bold)
                     products.forEachIndexed { index, item ->
-                        Card(colors = CardDefaults.cardColors(containerColor = Color.White), modifier = Modifier.fillMaxWidth()) {
+                        Card(colors = CardDefaults.cardColors(containerColor = CardSurface), modifier = Modifier.fillMaxWidth()) {
                             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text("Tovar " + (index + 1), Modifier.weight(1f), color = Green, fontWeight = FontWeight.Bold)
@@ -1042,7 +1042,7 @@ fun FinanceApplicationRows(raw: String, session: Session, changed: () -> Unit) {
             val products = o.optJSONArray("products") ?: JSONArray()
             val schedule = o.optJSONArray("schedule") ?: JSONArray()
             val guarantors = o.optJSONArray("guarantors") ?: JSONArray()
-            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(15.dp)) {
+            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = CardSurface), shape = RoundedCornerShape(15.dp)) {
                 Column(Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                     Text("Ariza #$id • " + o.text("customer_name"), color = Green, fontWeight = FontWeight.Bold)
                     Text("TOVARLAR", color = Green, fontWeight = FontWeight.Bold)
@@ -1136,7 +1136,7 @@ fun ApplicationRows(raw: String, session: Session, changed: () -> Unit) {
             val o = arr.getJSONObject(i)
             val id = o.optInt("id")
             val status = o.text("status")
-            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = CardSurface)) {
                 Column(Modifier.padding(13.dp)) {
                     Text("#" + id + " • " + o.text("title"), color = Green, fontWeight = FontWeight.Bold)
                     Text("Mijoz ID: " + o.optInt("customer_id"))
@@ -1179,7 +1179,7 @@ fun EmployeeRows(raw: String, session: Session, changed: () -> Unit) {
             val o = arr.getJSONObject(i)
             val active = o.optBoolean("is_active", true)
             Card(Modifier.fillMaxWidth().clickable { selected = JSONObject(o.toString()) },
-                colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(14.dp)) {
+                colors = CardDefaults.cardColors(containerColor = CardSurface), shape = RoundedCornerShape(14.dp)) {
                 Column(Modifier.padding(14.dp)) {
                     Text(o.text("full_name"), color = Green, fontWeight = FontWeight.Bold)
                     Text("Login: " + o.text("username"))
@@ -1303,7 +1303,7 @@ fun ReportRows(raw: String) {
 
 @Composable
 fun ReportTile(label: String, value: Int) {
-    Card(Modifier.fillMaxWidth().padding(bottom = 9.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+    Card(Modifier.fillMaxWidth().padding(bottom = 9.dp), colors = CardDefaults.cardColors(containerColor = CardSurface)) {
         Row(Modifier.fillMaxWidth().padding(17.dp), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(label)
             Text(value.toString(), color = Green, fontWeight = FontWeight.Bold, fontSize = 20.sp)
@@ -1342,14 +1342,14 @@ fun CustomerForm(close: () -> Unit, save: (String, String, String, String, Strin
         ) {
             Column(Modifier.fillMaxSize()) {
                 Row(
-                    Modifier.fillMaxWidth().background(Color.White).padding(horizontal = 18.dp, vertical = 14.dp),
+                    Modifier.fillMaxWidth().background(CardSurface).padding(horizontal = 18.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text("‹", color = Green, fontSize = 32.sp, modifier = Modifier.clickable { close() })
                     Spacer(Modifier.width(14.dp))
                     Column(Modifier.weight(1f)) {
                         Text("Mijoz qo‘shish", color = Color(0xFF10264D), fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                        Text("Mijoz ma’lumotlarini kiriting", color = Color(0xFF657594), fontSize = 12.sp)
+                        Text("Mijoz ma’lumotlarini kiriting", color = SecondaryText, fontSize = 12.sp)
                     }
                     Text("Mrpolatjan CRM", color = Green, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
@@ -1396,7 +1396,7 @@ fun CustomerForm(close: () -> Unit, save: (String, String, String, String, Strin
                     Card(
                         Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(22.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        colors = CardDefaults.cardColors(containerColor = CardSurface),
                         elevation = CardDefaults.cardElevation(3.dp)
                     ) {
                         Column(Modifier.fillMaxWidth().padding(16.dp)) {
@@ -1445,7 +1445,7 @@ fun CustomerForm(close: () -> Unit, save: (String, String, String, String, Strin
                             Row(verticalAlignment = Alignment.Top) {
                                 Checkbox(checked = offerAccepted, onCheckedChange = { offerAccepted = it })
                                 Column(Modifier.weight(1f).padding(top = 10.dp)) {
-                                    Text("Ommaviy oferta shartlari bilan tanishdim va roziman", fontSize = 13.sp, color = Color(0xFF263650))
+                                    Text("Ommaviy oferta shartlari bilan tanishdim va roziman", fontSize = 13.sp, color = PrimaryText)
                                 }
                             }
                             Row(verticalAlignment = Alignment.Top) {
