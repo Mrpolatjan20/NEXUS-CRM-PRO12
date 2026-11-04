@@ -623,6 +623,14 @@ def create_invoice(data: schemas.InvoiceCreate, db: Session = Depends(get_db), u
         raise HTTPException(status_code=404, detail="Shartnoma kodi topilmadi")
     if contract.status != "approved":
         raise HTTPException(status_code=409, detail="Faktura uchun shartnoma avval tasdiqlangan bo'lishi kerak")
+    approved_stock_out = db.scalar(
+        select(models.StockOut.id).where(
+            models.StockOut.contract_id == contract.id,
+            models.StockOut.status == "approved",
+        ).limit(1)
+    )
+    if not approved_stock_out:
+        raise HTTPException(status_code=409, detail="Faktura yaratishdan oldin chiqim tasdiqlanishi kerak")
     invoice = models.Invoice(contract_id=contract.id, supplier=data.supplier, amount=data.amount, status="pending", created_by=user.id)
     db.add(invoice)
     db.flush()
