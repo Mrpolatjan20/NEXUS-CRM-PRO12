@@ -96,6 +96,7 @@ class Contract(Base):
     reviewed_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    signature_data: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class StockOut(Base):
@@ -109,6 +110,7 @@ class StockOut(Base):
     reviewed_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    signature_data: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class Invoice(Base):
@@ -123,6 +125,7 @@ class Invoice(Base):
     reviewed_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    signature_data: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 # Moliyalashtirish arizalari uchun alohida ma'lumotlar jadvallari
