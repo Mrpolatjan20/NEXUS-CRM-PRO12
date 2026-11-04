@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
@@ -31,6 +32,7 @@ private const val API_URL =
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
         setContent {
             MaterialTheme {
                 NexusApp()
@@ -44,7 +46,7 @@ fun NexusApp() {
     var showSplash by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
-        kotlinx.coroutines.delay(10_000)
+        kotlinx.coroutines.delay(3000)
         showSplash = false
     }
 
@@ -55,6 +57,8 @@ fun NexusApp() {
     }
 }
 
+// SPLASH SCREEN
+
 @Composable
 fun SplashScreen() {
     Box(
@@ -63,30 +67,42 @@ fun SplashScreen() {
             .background(Green),
         contentAlignment = Alignment.Center
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
             Text(
-                "ISHONCH",
+                text = "ISHONCH",
                 fontSize = 38.sp,
                 fontWeight = FontWeight.ExtraBold,
                 color = Color.White
             )
+
             Spacer(Modifier.height(12.dp))
+
             Text(
-                "Ishonch bilan boshqaruv",
+                text = "Ishonch bilan boshqaruv",
                 color = Color.White,
                 fontSize = 16.sp
             )
+
             Spacer(Modifier.height(35.dp))
-            CircularProgressIndicator(color = Color.White)
+
+            CircularProgressIndicator(
+                color = Color.White
+            )
+
             Spacer(Modifier.height(35.dp))
+
             Text(
-                "NEXUS CRM PRO",
+                text = "NEXUS CRM PRO",
                 color = Color.White,
                 fontWeight = FontWeight.Bold
             )
         }
     }
 }
+
+// SERVER LOGIN
 
 suspend fun loginToServer(
     username: String,
@@ -101,11 +117,15 @@ suspend fun loginToServer(
         connection.connectTimeout = 30000
         connection.readTimeout = 60000
         connection.doOutput = true
+
         connection.setRequestProperty(
-            "Content-Type", "application/json"
+            "Content-Type",
+            "application/json"
         )
+
         connection.setRequestProperty(
-            "Accept", "application/json"
+            "Accept",
+            "application/json"
         )
 
         val body = JSONObject().apply {
@@ -118,6 +138,7 @@ suspend fun loginToServer(
         }
 
         val responseCode = connection.responseCode
+
         val responseStream =
             if (responseCode in 200..299) {
                 connection.inputStream
@@ -135,17 +156,21 @@ suspend fun loginToServer(
         } else {
             val message = try {
                 JSONObject(response).optString(
-                    "detail", "Server xatosi: $responseCode"
+                    "detail",
+                    "Server xatosi: $responseCode"
                 )
             } catch (_: Exception) {
                 "Server xatosi: $responseCode"
             }
+
             throw Exception(message)
         }
     } finally {
         connection.disconnect()
     }
 }
+
+// LOGIN SCREEN
 
 @Composable
 fun LoginScreen() {
@@ -174,14 +199,16 @@ fun LoginScreen() {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                "NEXUS CRM PRO",
+                text = "NEXUS CRM PRO",
                 fontSize = 27.sp,
                 fontWeight = FontWeight.Bold,
                 color = Green
             )
 
+            Spacer(Modifier.height(8.dp))
+
             Text(
-                "Boshqaruv tizimiga kirish",
+                text = "Boshqaruv tizimiga kirish",
                 color = Color.DarkGray
             )
 
@@ -216,7 +243,11 @@ fun LoginScreen() {
             Spacer(Modifier.height(16.dp))
 
             if (error.isNotEmpty()) {
-                Text(error, color = Color.Red)
+                Text(
+                    text = error,
+                    color = Color.Red
+                )
+
                 Spacer(Modifier.height(12.dp))
             }
 
@@ -234,6 +265,7 @@ fun LoginScreen() {
                                     username.trim(),
                                     password
                                 )
+
                                 loggedIn = token.isNotBlank()
                             } catch (e: Exception) {
                                 error = e.message
@@ -266,25 +298,239 @@ fun LoginScreen() {
     }
 }
 
+// MAIN DASHBOARD
+
 @Composable
 fun DashboardScreen(username: String) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(LightGreen)
-            .padding(24.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = LightGreen
     ) {
-        Text(
-            "NEXUS CRM PRO",
-            fontSize = 28.sp,
-            fontWeight = FontWeight.Bold,
-            color = Green
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(18.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "NEXUS CRM PRO",
+                        fontSize = 23.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Green
+                    )
+
+                    Text(
+                        text = "Boshqaruv paneli",
+                        fontSize = 13.sp,
+                        color = Color.Gray
+                    )
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(50.dp),
+                    color = Green
+                ) {
+                    Text(
+                        text = username.take(1).uppercase(),
+                        modifier = Modifier.padding(
+                            horizontal = 15.dp,
+                            vertical = 10.dp
+                        ),
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(25.dp))
+
+            Text(
+                text = "Xush kelibsiz, $username!",
+                fontSize = 21.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.DarkGray
+            )
+
+            Text(
+                text = "Bugungi ish faoliyatingiz",
+                color = Color.Gray,
+                fontSize = 14.sp
+            )
+
+            Spacer(Modifier.height(22.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                StatCard(
+                    title = "Mijozlar",
+                    value = "0",
+                    modifier = Modifier.weight(1f)
+                )
+
+                StatCard(
+                    title = "Arizalar",
+                    value = "0",
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                StatCard(
+                    title = "Tasdiqlangan",
+                    value = "0",
+                    modifier = Modifier.weight(1f)
+                )
+
+                StatCard(
+                    title = "Jarayonda",
+                    value = "0",
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Spacer(Modifier.height(25.dp))
+
+            Text(
+                text = "ASOSIY BO‘LIMLAR",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = Green
+            )
+
+            Spacer(Modifier.height(12.dp))
+
+            ModuleCard(
+                emoji = "👥",
+                title = "Mijozlar",
+                description = "Mijozlar ro‘yxati"
+            )
+
+            ModuleCard(
+                emoji = "📋",
+                title = "Arizalar",
+                description = "Yangi arizalar va ularning holati"
+            )
+
+            ModuleCard(
+                emoji = "👨‍💼",
+                title = "Xodimlar",
+                description = "Operator va menejerlar"
+            )
+
+            ModuleCard(
+                emoji = "📊",
+                title = "Hisobotlar",
+                description = "Statistika va KPI"
+            )
+
+            ModuleCard(
+                emoji = "🕘",
+                title = "Faoliyat tarixi",
+                description = "Amallar va audit jurnali"
+            )
+
+            Spacer(Modifier.weight(1f))
+
+            Text(
+                text = "NEXUS CRM PRO • Boshqaruv tizimi",
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center,
+                color = Color.Gray,
+                fontSize = 11.sp
+            )
+        }
+    }
+}
+
+// STATISTICS CARD
+
+@Composable
+fun StatCard(
+    title: String,
+    value: String,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White
         )
-        Spacer(Modifier.height(20.dp))
-        Text("Xush kelibsiz, $username!")
-        Spacer(Modifier.height(12.dp))
-        Text("Tizimga muvaffaqiyatli kirdingiz.")
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Text(
+                text = value,
+                fontSize = 27.sp,
+                fontWeight = FontWeight.Bold,
+                color = Green
+            )
+
+            Text(
+                text = title,
+                fontSize = 12.sp,
+                color = Color.Gray
+            )
+        }
+    }
+}
+
+// MODULE CARD
+
+@Composable
+fun ModuleCard(
+    emoji: String,
+    title: String,
+    description: String
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 9.dp),
+        shape = RoundedCornerShape(13.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = emoji,
+                fontSize = 25.sp
+            )
+
+            Spacer(Modifier.width(14.dp))
+
+            Column {
+                Text(
+                    text = title,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.DarkGray
+                )
+
+                Text(
+                    text = description,
+                    fontSize = 12.sp,
+                    color = Color.Gray
+                )
+            }
+        }
     }
 }
