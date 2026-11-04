@@ -99,11 +99,11 @@ class RecordReview(BaseModel):
 
 
 class StockOutCreate(BaseModel):
-    contract_id: int
+    contract_code: str = Field(min_length=4, max_length=20)
     amount: float = Field(gt=0)
 
 
 class InvoiceCreate(BaseModel):
-    contract_id: int
+    contract_code: str = Field(min_length=4, max_length=20)
     amount: float = Field(gt=0)
     supplier: str = Field(min_length=2, max_length=200)
