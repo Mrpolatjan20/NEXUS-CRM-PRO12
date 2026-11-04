@@ -1,6 +1,11 @@
 package uz.nexus.crm
 
 import android.os.Bundle
+import android.app.DownloadManager
+import android.content.Context
+import android.net.Uri
+import android.os.Environment
+import android.widget.Toast
 import android.graphics.Bitmap
 import android.util.Base64
 import java.io.ByteArrayOutputStream
@@ -30,6 +35,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -270,9 +276,102 @@ fun MainDashboard(session: Session, logout: () -> Unit) {
             Text("Chiqish", color = Color.White, modifier = Modifier.clickable { logout() }.padding(8.dp))
         }
         if (page == "home") HomePage { page = it }
+        else if (page == "updates") UpdatePage { page = "home" }
         else ApiPage(session, page) { page = "home" }
     }
 }
+
+
+@Composable
+fun UpdatePage(back: () -> Unit) {
+    val context = LocalContext.current
+    var checking by remember { mutableStateOf(true) }
+    var error by remember { mutableStateOf("") }
+    var latestVersion by remember { mutableStateOf("") }
+    var downloadUrl by remember { mutableStateOf("") }
+    var currentVersion by remember { mutableStateOf("1.0.0") }
+
+    LaunchedEffect(Unit) {
+        try {
+            currentVersion = context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.0.0"
+            val release = withContext(Dispatchers.IO) {
+                val connection = URL("https://api.github.com/repos/Mrpolatjan20/NEXUS-CRM-PRO12/releases/latest").openConnection() as HttpURLConnection
+                try {
+                    connection.connectTimeout = 15000
+                    connection.readTimeout = 20000
+                    connection.setRequestProperty("Accept", "application/vnd.github+json")
+                    connection.setRequestProperty("User-Agent", "NEXUS-CRM-Android")
+                    if (connection.responseCode !in 200..299) throw Exception("Yangilanish topilmadi")
+                    JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
+                } finally { connection.disconnect() }
+            }
+            latestVersion = release.optString("tag_name", "").removePrefix("v")
+            val assets = release.optJSONArray("assets") ?: JSONArray()
+            for (i in 0 until assets.length()) {
+                val asset = assets.optJSONObject(i) ?: continue
+                if (asset.optString("name") == "Mrpolatjan-CRM.apk") {
+                    downloadUrl = asset.optString("browser_download_url", "")
+                    break
+                }
+            }
+            if (latestVersion.isBlank() || downloadUrl.isBlank()) error = "Hozircha Release APK chiqarilmagan."
+        } catch (e: Exception) {
+            error = e.message ?: "Yangilanishni tekshirishda xatolik."
+        } finally {
+            checking = false
+        }
+    }
+
+    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("‹ Orqaga", color = Green, fontWeight = FontWeight.Bold,
+                modifier = Modifier.clickable { back() }.padding(8.dp))
+            Text("Ilovani yangilash", color = Green, fontSize = 21.sp, fontWeight = FontWeight.Bold)
+        }
+        Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp)) {
+            Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("NEXUS CRM", color = Green, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                Text("O‘rnatilgan versiya: $currentVersion", color = Color.DarkGray)
+                if (checking) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(Modifier.size(22.dp), color = Green)
+                        Spacer(Modifier.width(10.dp))
+                        Text("Yangilanish tekshirilmoqda…")
+                    }
+                } else if (latestVersion.isNotBlank() && downloadUrl.isNotBlank()) {
+                    Text("Oxirgi versiya: $latestVersion", color = Color.DarkGray)
+                    if (latestVersion != currentVersion) {
+                        Text("Yangi versiya mavjud.", color = Green, fontWeight = FontWeight.SemiBold)
+                        Button(
+                            onClick = {
+                                try {
+                                    val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                                    val request = DownloadManager.Request(Uri.parse(downloadUrl))
+                                        .setTitle("NEXUS CRM yangilanishi")
+                                        .setDescription("APK yuklab olinmoqda. Yuklangach bildirishnomani bosing.")
+                                        .setMimeType("application/vnd.android.package-archive")
+                                        .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                                        .setDestinationInExternalFilesDir(context, Environment.DIRECTORY_DOWNLOADS, "Mrpolatjan-CRM.apk")
+                                    manager.enqueue(request)
+                                    Toast.makeText(context, "APK yuklanmoqda. Tugagach bildirishnomani bosing.", Toast.LENGTH_LONG).show()
+                                } catch (e: Exception) {
+                                    error = e.message ?: "Yuklab olish boshlanmadi."
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Green),
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("YANGILANISHNI YUKLAB OLISH") }
+                        Text("Yuklab olish tugagach Android o‘rnatish oynasini oching va tasdiqlang. Ilovani o‘chirish shart emas.", color = Color.Gray, fontSize = 12.sp)
+                    } else {
+                        Text("Ilova eng so‘nggi versiyada.", color = Green, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+                if (error.isNotBlank()) Text(error, color = Color(0xFFB3261E), fontSize = 13.sp)
+            }
+        }
+    }
+}
+
 
 @Composable
 fun HomePage(open: (String) -> Unit) {
@@ -285,7 +384,8 @@ fun HomePage(open: (String) -> Unit) {
         "applications" to "Moliyalashtirish arizalari",
         "employees" to "Xodimlar",
         "reports" to "Hisobotlar",
-        "audit" to "Faoliyat tarixi"
+        "audit" to "Faoliyat tarixi",
+        "updates" to "Ilovani yangilash"
     )
     Column(Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
         Text("Bosh sahifa", color = Green, fontSize = 23.sp, fontWeight = FontWeight.Bold)
@@ -308,6 +408,7 @@ fun HomePage(open: (String) -> Unit) {
                             "applications" -> "📋"
                             "employees" -> "👨‍💼"
                             "reports" -> "📊"
+                            "updates" -> "⬇️"
                             else -> "🕘"
                         },
                         fontSize = 25.sp
