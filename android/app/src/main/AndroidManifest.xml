@@ -5,7 +5,7 @@
 
     <application
         android:allowBackup="false"
-        android:label="NEXUS CRM PRO"
+        android:label="Mrpolatjan CRM"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
 
