@@ -37,8 +37,8 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 
-private val Green = Color(0xFF087C42)
-private val LightGreen = Color(0xFFE8F5EC)
+private val Green = Color(0xFF0754C7)
+private val LightGreen = Color(0xFFF1F6FF)
 private const val API_URL = "https://nexus-crm-backend-g8or.onrender.com"
 
 class MainActivity : ComponentActivity() {
@@ -101,7 +101,7 @@ fun NexusApp() {
     if (splash) {
         Box(Modifier.fillMaxSize().background(Green), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("NEXUS CRM PRO", color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+                Text("Mrpolatjan CRM", color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(20.dp))
                 CircularProgressIndicator(color = Color.White)
             }
@@ -121,41 +121,105 @@ fun LoginScreen(onLogin: (Session) -> Unit) {
     val scope = rememberCoroutineScope()
 
     Surface(Modifier.fillMaxSize(), color = LightGreen) {
-        Column(
-            Modifier.fillMaxSize().padding(24.dp),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text("NEXUS CRM PRO", color = Green, fontSize = 28.sp, fontWeight = FontWeight.Bold)
-            Text("Boshqaruv tizimiga kirish")
-            Spacer(Modifier.height(25.dp))
-            OutlinedTextField(username, { username = it; error = "" }, label = { Text("Login") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-            Spacer(Modifier.height(12.dp))
-            OutlinedTextField(password, { password = it; error = "" }, label = { Text("Parol") }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth(), singleLine = true)
-            if (error.isNotBlank()) Text(error, color = Color.Red, modifier = Modifier.padding(8.dp))
-            Button(
-                onClick = {
-                    if (username.isBlank() || password.isBlank()) error = "Login va parolni kiriting"
-                    else {
-                        loading = true
-                        scope.launch {
-                            try {
-                                val response = JSONObject(api("POST", "/auth/login", body = JSONObject().put("username", username.trim()).put("password", password)))
-                                val token = response.getString("access_token")
-                                val me = JSONObject(api("GET", "/me", token))
-                                onLogin(Session(token, me.text("username"), me.text("full_name"), me.text("role")))
-                            } catch (e: Exception) {
-                                error = e.message ?: "Ulanish xatosi"
-                            } finally { loading = false }
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Column(
+                Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Mrpolatjan CRM brend belgisi
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Box(
+                        Modifier.size(76.dp).background(
+                            Green, RoundedCornerShape(22.dp)
+                        ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("M", color = Color.White, fontSize = 48.sp, fontWeight = FontWeight.Black)
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("Mrpolatjan", color = Color(0xFF10264D), fontSize = 31.sp, fontWeight = FontWeight.ExtraBold)
+                        Text("CRM", color = Green, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+                        Row(
+                            verticalAlignment = Alignment.Bottom,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier.height(20.dp)
+                        ) {
+                            listOf(8, 12, 16, 20).forEach { h ->
+                                Box(Modifier.width(7.dp).height(h.dp).background(Green, RoundedCornerShape(3.dp)))
+                            }
                         }
                     }
-                },
-                enabled = !loading,
-                modifier = Modifier.fillMaxWidth().padding(top = 18.dp).height(52.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Green)
-            ) {
-                if (loading) CircularProgressIndicator(Modifier.size(22.dp), color = Color.White)
-                else Text("TIZIMGA KIRISH")
+                }
+                Spacer(Modifier.height(10.dp))
+                Text("CRM – Boshqaruv tizimi", color = Color(0xFF52627E), fontSize = 15.sp)
+                Spacer(Modifier.height(34.dp))
+
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 5.dp)
+                ) {
+                    Column(Modifier.fillMaxWidth().padding(20.dp)) {
+                        Text("Tizimga kirish", color = Color(0xFF10264D), fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                        Text("Davom etish uchun ma’lumotlaringizni kiriting", color = Color.Gray, fontSize = 12.sp)
+                        Spacer(Modifier.height(20.dp))
+                        OutlinedTextField(
+                            value = username,
+                            onValueChange = { username = it; error = "" },
+                            label = { Text("Login") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            shape = RoundedCornerShape(14.dp)
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        OutlinedTextField(
+                            value = password,
+                            onValueChange = { password = it; error = "" },
+                            label = { Text("Parol") },
+                            visualTransformation = PasswordVisualTransformation(),
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            shape = RoundedCornerShape(14.dp)
+                        )
+                        if (error.isNotBlank()) {
+                            Text(error, color = Color.Red, modifier = Modifier.padding(top = 10.dp), fontSize = 13.sp)
+                        }
+                        Button(
+                            onClick = {
+                                if (username.isBlank() || password.isBlank()) error = "Login va parolni kiriting"
+                                else {
+                                    loading = true
+                                    scope.launch {
+                                        try {
+                                            val response = JSONObject(api("POST", "/auth/login", body = JSONObject().put("username", username.trim()).put("password", password)))
+                                            val token = response.getString("access_token")
+                                            val me = JSONObject(api("GET", "/me", token))
+                                            onLogin(Session(token, me.text("username"), me.text("full_name"), me.text("role")))
+                                        } catch (e: Exception) {
+                                            error = e.message ?: "Ulanish xatosi"
+                                        } finally { loading = false }
+                                    }
+                                }
+                            },
+                            enabled = !loading,
+                            modifier = Modifier.fillMaxWidth().padding(top = 18.dp).height(54.dp),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Green)
+                        ) {
+                            if (loading) CircularProgressIndicator(Modifier.size(22.dp), color = Color.White)
+                            else Text("KIRISH", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+                Spacer(Modifier.height(22.dp))
+                Text("Xavfsiz. Tez. Ishonchli.", color = Green, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(8.dp))
+                Text("© 2026 Mrpolatjan  •  v1.0.0", color = Color.Gray, fontSize = 11.sp)
             }
         }
     }
@@ -171,7 +235,7 @@ fun MainDashboard(session: Session, logout: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(Modifier.weight(1f)) {
-                Text("NEXUS CRM PRO", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                Text("Mrpolatjan CRM", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
                 Text(session.fullName + " • " + session.role, color = Color.White, fontSize = 12.sp)
             }
             Text("Chiqish", color = Color.White, modifier = Modifier.clickable { logout() }.padding(8.dp))
