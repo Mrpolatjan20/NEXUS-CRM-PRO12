@@ -43,6 +43,8 @@ class CustomerCreate(BaseModel):
     phone: str = Field(min_length=7, max_length=30)
     address: str | None = None
     photo_data: str | None = Field(default=None, max_length=200000)
+    offer_accepted: bool = False
+    personal_data_consent: bool = False
 
 
 class CustomerOut(BaseModel):
@@ -54,6 +56,8 @@ class CustomerOut(BaseModel):
     phone: str
     address: str | None
     photo_data: str | None = None
+    offer_accepted: bool = False
+    personal_data_consent: bool = False
     created_by: int
 
     model_config = ConfigDict(from_attributes=True)
