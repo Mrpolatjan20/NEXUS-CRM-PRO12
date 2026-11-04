@@ -347,7 +347,7 @@ fun ApiPage(session: Session, page: String, back: () -> Unit) {
         try {
             raw = when (page) {
                 "customers", "search" -> api("GET", "/customers", session.token)
-                "applications" -> api("GET", "/applications", session.token)
+                "applications" -> api("GET", "/finance-applications", session.token)
                 "employees" -> api("GET", "/users", session.token)
                 "audit" -> api("GET", "/audit", session.token)
                 "reports" -> JSONObject()
@@ -403,7 +403,7 @@ fun ApiPage(session: Session, page: String, back: () -> Unit) {
                 }
                 "applications" -> {
                     ActionButton("＋ Yangi ariza") { dialog = true }
-                    ApplicationRows(raw, session) { refresh++ }
+                    FinanceApplicationRows(raw, session) { refresh++ }
                 }
                 "employees" -> {
                     ActionButton("＋ Xodim qo‘shish") { dialog = true }
@@ -484,15 +484,15 @@ fun ApiPage(session: Session, page: String, back: () -> Unit) {
                     }
                 }
             )
-            "applications" -> ApplicationForm(
+            "applications" -> FinanceApplicationForm(
                 close = { dialog = false },
-                save = { customerId, titleText, desc ->
+                save = { body ->
                     scope.launch {
                         try {
-                            api("POST", "/applications", session.token, JSONObject().put("customer_id", customerId).put("title", titleText).put("description", if (desc.isBlank()) JSONObject.NULL else desc))
+                            api("POST", "/finance-applications", session.token, body)
                             dialog = false
                             refresh++
-                        } catch (e: Exception) { error = e.message ?: "Saqlash xatosi"; dialog = false }
+                        } catch (e: Exception) { error = e.message ?: "Ariza saqlash xatosi"; dialog = false }
                     }
                 }
             )
@@ -723,6 +723,167 @@ fun CustomerRows(raw: String) {
                 }
             }
         }
+    }
+}
+
+
+@Composable
+fun FinanceApplicationForm(close: () -> Unit, save: (JSONObject) -> Unit) {
+    var customerId by remember { mutableStateOf("") }
+    var productName by remember { mutableStateOf("") }
+    var category by remember { mutableStateOf("") }
+    var supplier by remember { mutableStateOf("") }
+    var price by remember { mutableStateOf("") }
+    var quantity by remember { mutableStateOf("1") }
+    var term by remember { mutableStateOf("12") }
+    var guarantorName by remember { mutableStateOf("") }
+    var guarantorPhone by remember { mutableStateOf("") }
+    var guarantorPassport by remember { mutableStateOf("") }
+    var problem by remember { mutableStateOf("") }
+    Dialog(onDismissRequest = close, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(Modifier.fillMaxSize(), color = Color(0xFFF4F7FF)) {
+            Column(Modifier.fillMaxSize()) {
+                Row(Modifier.fillMaxWidth().background(Color.White).padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("‹", color = Green, fontSize = 30.sp, modifier = Modifier.clickable { close() })
+                    Spacer(Modifier.width(12.dp))
+                    Column {
+                        Text("Yangi ariza", color = Green, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                        Text("50% ustama + qo‘shimcha 5%", color = Color.Gray, fontSize = 12.sp)
+                    }
+                }
+                Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                    OutlinedTextField(customerId, { customerId = it.filter(Char::isDigit) }, label = { Text("Mijoz ID raqami") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth(), singleLine = true)
+                    Text("TOVARLAR", color = Green, fontWeight = FontWeight.Bold)
+                    OutlinedTextField(productName, { productName = it }, label = { Text("Tovar nomi") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                    OutlinedTextField(category, { category = it }, label = { Text("Kategoriya") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                    OutlinedTextField(supplier, { supplier = it }, label = { Text("Ta’minotchi") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                    OutlinedTextField(price, { price = it.filter(Char::isDigit) }, label = { Text("Narxi (UZS)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth(), singleLine = true)
+                    OutlinedTextField(quantity, { quantity = it.filter(Char::isDigit) }, label = { Text("Miqdori") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth(), singleLine = true)
+                    Text("SHARTLAR", color = Green, fontWeight = FontWeight.Bold)
+                    OutlinedTextField(term, { term = it.filter(Char::isDigit).take(2) }, label = { Text("Muddat (oy)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth(), singleLine = true)
+                    Text("50% ustama + 5% qo‘shimcha = 57,5%", color = Green, fontWeight = FontWeight.SemiBold)
+                    Text("KAFIL (ixtiyoriy)", color = Green, fontWeight = FontWeight.Bold)
+                    OutlinedTextField(guarantorName, { guarantorName = it }, label = { Text("Kafil F.I.Sh.") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                    OutlinedTextField(guarantorPhone, { guarantorPhone = it }, label = { Text("Kafil telefoni") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                    OutlinedTextField(guarantorPassport, { guarantorPassport = it }, label = { Text("Kafil pasporti") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                    if (problem.isNotBlank()) Text(problem, color = Color.Red, fontSize = 12.sp)
+                }
+                Button(onClick = {
+                    val cid = customerId.toIntOrNull()
+                    val p = price.toDoubleOrNull()
+                    val q = quantity.toIntOrNull()
+                    val m = term.toIntOrNull()
+                    if (cid == null || productName.trim().length < 2 || p == null || p <= 0 || q == null || q <= 0 || m == null || m !in 1..60) {
+                        problem = "Mijoz ID, tovar nomi, narxi, miqdori va muddatni tekshiring."
+                    } else if (guarantorName.isNotBlank() && guarantorPhone.filter(Char::isDigit).length < 7) {
+                        problem = "Kafil telefon raqamini to‘liq kiriting."
+                    } else {
+                        val products = JSONArray().put(JSONObject().put("name", productName.trim()).put("category", category.trim()).put("supplier", supplier.trim()).put("unit_price", p).put("quantity", q))
+                        val guarantors = JSONArray()
+                        if (guarantorName.isNotBlank()) guarantors.put(JSONObject().put("full_name", guarantorName.trim()).put("phone", guarantorPhone.trim()).put("passport_number", guarantorPassport.trim()))
+                        save(JSONObject().put("customer_id", cid).put("term_months", m).put("products", products).put("guarantors", guarantors))
+                    }
+                }, modifier = Modifier.fillMaxWidth().padding(16.dp).height(52.dp), colors = ButtonDefaults.buttonColors(containerColor = Green)) { Text("Arizani yuborish") }
+            }
+        }
+    }
+}
+
+@Composable
+fun FinanceApplicationRows(raw: String, session: Session, changed: () -> Unit) {
+    val arr = remember(raw) { JSONArray(raw) }
+    val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+        if (arr.length() == 0) item { MessageCard("Hozircha arizalar yo‘q.") }
+        items((0 until arr.length()).toList()) { i ->
+            val o = arr.getJSONObject(i)
+            val id = o.optInt("id")
+            val status = o.text("status")
+            val products = o.optJSONArray("products") ?: JSONArray()
+            val schedule = o.optJSONArray("schedule") ?: JSONArray()
+            val guarantors = o.optJSONArray("guarantors") ?: JSONArray()
+            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(15.dp)) {
+                Column(Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Text("Ariza #$id • " + o.text("customer_name"), color = Green, fontWeight = FontWeight.Bold)
+                    Text("TOVARLAR", color = Green, fontWeight = FontWeight.Bold)
+                    for (j in 0 until products.length()) {
+                        val p = products.getJSONObject(j)
+                        Text(p.text("name") + " • " + p.optInt("quantity") + " dona")
+                        Text("Ta’minotchi: " + p.text("supplier"))
+                        Text("Narxi: " + String.format("%,.0f", p.optDouble("line_total")) + " so‘m")
+                    }
+                    Text("Tovarlar jami: " + String.format("%,.0f", o.optDouble("base_amount")) + " so‘m")
+                    Text("Ustama: 50% + 5%")
+                    Text("Muddat: " + o.optInt("term_months") + " oy")
+                    Text("JAMI: " + String.format("%,.0f", o.optDouble("total_amount")) + " so‘m", color = Green, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
+                    Text("Holat: " + when(status) { "approved" -> "Tasdiqlangan"; "rejected" -> "Rad etilgan"; else -> "Ko‘rib chiqilmoqda" }, color = if(status=="approved") Green else Color(0xFF9A6700), fontWeight = FontWeight.SemiBold)
+                    if (guarantors.length() > 0) {
+                        Text("KAFILLAR", color = Green, fontWeight = FontWeight.Bold)
+                        for (j in 0 until guarantors.length()) {
+                            val g = guarantors.getJSONObject(j)
+                            Text(g.text("full_name") + " • " + g.text("phone"))
+                        }
+                    }
+                    Text("GRAFIK", color = Green, fontWeight = FontWeight.Bold)
+                    for (j in 0 until schedule.length()) {
+                        val s = schedule.getJSONObject(j)
+                        Text(s.optInt("number").toString() + ". " + s.text("due_date") + " — " + String.format("%,.0f", s.optDouble("amount")) + " so‘m")
+                    }
+                    Button(onClick = { shareFinancePdf(context, o) }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Green)) { Text("PDF qilib ulashish") }
+                    if (status == "pending" && (session.role == "manager" || session.role == "admin")) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = { scope.launch { try { api("PATCH", "/finance-applications/$id/review", session.token, JSONObject().put("status", "approved")); changed() } catch (_: Exception) { } } }, colors = ButtonDefaults.buttonColors(containerColor = Green)) { Text("Tasdiqlash") }
+                            OutlinedButton(onClick = { scope.launch { try { api("PATCH", "/finance-applications/$id/review", session.token, JSONObject().put("status", "rejected")); changed() } catch (_: Exception) { } } }) { Text("Rad etish") }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun shareFinancePdf(context: android.content.Context, data: JSONObject) {
+    try {
+        val document = android.graphics.pdf.PdfDocument()
+        val pageInfo = android.graphics.pdf.PdfDocument.PageInfo.Builder(595, 842, 1).create()
+        val page = document.startPage(pageInfo)
+        val canvas = page.canvas
+        val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 12f; color = android.graphics.Color.BLACK }
+        var y = 48f
+        fun line(value: String, bold: Boolean = false) {
+            paint.textSize = if (bold) 16f else 11f
+            paint.isFakeBoldText = bold
+            canvas.drawText(value.take(90), 40f, y, paint)
+            y += if (bold) 28f else 20f
+        }
+        line("NEXUS CRM — TO‘LOV GRAFIGI", true)
+        line("Ariza № " + data.optInt("id"))
+        line("Mijoz: " + data.optString("customer_name"))
+        line("Tovarlar jami: " + String.format("%,.0f", data.optDouble("base_amount")) + " so‘m")
+        line("Ustama: 50% + qo‘shimcha 5%")
+        line("Muddat: " + data.optInt("term_months") + " oy")
+        line("JAMI TO‘LOV: " + String.format("%,.0f", data.optDouble("total_amount")) + " so‘m", true)
+        y += 12f
+        line("TO‘LOV GRAFIGI", true)
+        val schedule = data.optJSONArray("schedule") ?: JSONArray()
+        for (i in 0 until schedule.length()) {
+            val item = schedule.getJSONObject(i)
+            line(item.optInt("number").toString() + ". " + item.optString("due_date") + " — " + String.format("%,.0f", item.optDouble("amount")) + " so‘m")
+        }
+        document.finishPage(page)
+        val file = java.io.File(context.cacheDir, "NEXUS_Tolov_Grafigi_" + data.optInt("id") + ".pdf")
+        file.outputStream().use { document.writeTo(it) }
+        document.close()
+        val uri = androidx.core.content.FileProvider.getUriForFile(context, context.packageName + ".fileprovider", file)
+        val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+            type = "application/pdf"
+            putExtra(android.content.Intent.EXTRA_STREAM, uri)
+            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(android.content.Intent.createChooser(intent, "To‘lov grafigini ulashish"))
+    } catch (e: Exception) {
+        android.widget.Toast.makeText(context, "PDF yaratishda xato: " + (e.message ?: ""), android.widget.Toast.LENGTH_LONG).show()
     }
 }
 
