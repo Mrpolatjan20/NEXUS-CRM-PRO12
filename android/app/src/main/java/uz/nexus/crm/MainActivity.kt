@@ -727,19 +727,24 @@ fun CustomerRows(raw: String) {
 }
 
 
+
+private class FinanceProductDraft {
+    var name by mutableStateOf("")
+    var category by mutableStateOf("")
+    var supplier by mutableStateOf("")
+    var price by mutableStateOf("")
+    var quantity by mutableStateOf("1")
+}
+
 @Composable
 fun FinanceApplicationForm(close: () -> Unit, save: (JSONObject) -> Unit) {
     var customerId by remember { mutableStateOf("") }
-    var productName by remember { mutableStateOf("") }
-    var category by remember { mutableStateOf("") }
-    var supplier by remember { mutableStateOf("") }
-    var price by remember { mutableStateOf("") }
-    var quantity by remember { mutableStateOf("1") }
     var term by remember { mutableStateOf("12") }
     var guarantorName by remember { mutableStateOf("") }
     var guarantorPhone by remember { mutableStateOf("") }
     var guarantorPassport by remember { mutableStateOf("") }
     var problem by remember { mutableStateOf("") }
+    val products = remember { mutableStateListOf(FinanceProductDraft()) }
     Dialog(onDismissRequest = close, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxSize(), color = Color(0xFFF4F7FF)) {
             Column(Modifier.fillMaxSize()) {
@@ -754,11 +759,24 @@ fun FinanceApplicationForm(close: () -> Unit, save: (JSONObject) -> Unit) {
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
                     OutlinedTextField(customerId, { customerId = it.filter(Char::isDigit) }, label = { Text("Mijoz ID raqami") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth(), singleLine = true)
                     Text("TOVARLAR", color = Green, fontWeight = FontWeight.Bold)
-                    OutlinedTextField(productName, { productName = it }, label = { Text("Tovar nomi") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                    OutlinedTextField(category, { category = it }, label = { Text("Kategoriya") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                    OutlinedTextField(supplier, { supplier = it }, label = { Text("Ta’minotchi") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                    OutlinedTextField(price, { price = it.filter(Char::isDigit) }, label = { Text("Narxi (UZS)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth(), singleLine = true)
-                    OutlinedTextField(quantity, { quantity = it.filter(Char::isDigit) }, label = { Text("Miqdori") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth(), singleLine = true)
+                    products.forEachIndexed { index, item ->
+                        Card(colors = CardDefaults.cardColors(containerColor = Color.White), modifier = Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("Tovar " + (index + 1), Modifier.weight(1f), color = Green, fontWeight = FontWeight.Bold)
+                                    if (products.size > 1) Text("O‘chirish", color = Color.Red, modifier = Modifier.clickable { products.removeAt(index) })
+                                }
+                                OutlinedTextField(item.name, { item.name = it }, label = { Text("Tovar nomi") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                                OutlinedTextField(item.category, { item.category = it }, label = { Text("Kategoriya") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                                OutlinedTextField(item.supplier, { item.supplier = it }, label = { Text("Ta’minotchi") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    OutlinedTextField(item.price, { item.price = it.filter(Char::isDigit) }, label = { Text("Narxi (UZS)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1.4f), singleLine = true)
+                                    OutlinedTextField(item.quantity, { item.quantity = it.filter(Char::isDigit) }, label = { Text("Miqdori") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(0.7f), singleLine = true)
+                                }
+                            }
+                        }
+                    }
+                    OutlinedButton(onClick = { if (products.size < 30) products.add(FinanceProductDraft()) }, modifier = Modifier.fillMaxWidth()) { Text("＋ Tovar qo‘shish") }
                     Text("SHARTLAR", color = Green, fontWeight = FontWeight.Bold)
                     OutlinedTextField(term, { term = it.filter(Char::isDigit).take(2) }, label = { Text("Muddat (oy)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth(), singleLine = true)
                     Text("50% ustama + 5% qo‘shimcha = 57,5%", color = Green, fontWeight = FontWeight.SemiBold)
@@ -770,18 +788,20 @@ fun FinanceApplicationForm(close: () -> Unit, save: (JSONObject) -> Unit) {
                 }
                 Button(onClick = {
                     val cid = customerId.toIntOrNull()
-                    val p = price.toDoubleOrNull()
-                    val q = quantity.toIntOrNull()
-                    val m = term.toIntOrNull()
-                    if (cid == null || productName.trim().length < 2 || p == null || p <= 0 || q == null || q <= 0 || m == null || m !in 1..60) {
-                        problem = "Mijoz ID, tovar nomi, narxi, miqdori va muddatni tekshiring."
+                    val months = term.toIntOrNull()
+                    val validProducts = products.all { it.name.trim().length >= 2 && (it.price.toDoubleOrNull() ?: 0.0) > 0 && (it.quantity.toIntOrNull() ?: 0) > 0 }
+                    if (cid == null || months == null || months !in 1..60 || !validProducts) {
+                        problem = "Mijoz ID va barcha tovarlarning nomi, narxi, miqdorini tekshiring."
                     } else if (guarantorName.isNotBlank() && guarantorPhone.filter(Char::isDigit).length < 7) {
                         problem = "Kafil telefon raqamini to‘liq kiriting."
                     } else {
-                        val products = JSONArray().put(JSONObject().put("name", productName.trim()).put("category", category.trim()).put("supplier", supplier.trim()).put("unit_price", p).put("quantity", q))
+                        val productArray = JSONArray()
+                        products.forEach { item ->
+                            productArray.put(JSONObject().put("name", item.name.trim()).put("category", item.category.trim()).put("supplier", item.supplier.trim()).put("unit_price", item.price.toDouble()).put("quantity", item.quantity.toInt()))
+                        }
                         val guarantors = JSONArray()
                         if (guarantorName.isNotBlank()) guarantors.put(JSONObject().put("full_name", guarantorName.trim()).put("phone", guarantorPhone.trim()).put("passport_number", guarantorPassport.trim()))
-                        save(JSONObject().put("customer_id", cid).put("term_months", m).put("products", products).put("guarantors", guarantors))
+                        save(JSONObject().put("customer_id", cid).put("term_months", months).put("products", productArray).put("guarantors", guarantors))
                     }
                 }, modifier = Modifier.fillMaxWidth().padding(16.dp).height(52.dp), colors = ButtonDefaults.buttonColors(containerColor = Green)) { Text("Arizani yuborish") }
             }
