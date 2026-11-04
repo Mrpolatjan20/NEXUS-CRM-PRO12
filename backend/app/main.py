@@ -488,7 +488,7 @@ def create_contract(
     if not customer:
         raise HTTPException(status_code=404, detail="Mijoz topilmadi")
     contract = models.Contract(
-        contract_code="1000" + str(datetime.now().strftime("%y%m%d")) + str(secrets.randbelow(900) + 100),
+        contract_code="1000" + f"{secrets.randbelow(1000000):06d}",
         customer_id=customer.id,
         status="pending",
         created_by=user.id,
@@ -525,9 +525,9 @@ def review_contract(contract_id: int, data: schemas.RecordReview, db: Session = 
 # Chiqim tovarlar
 @app.post("/stock-outs")
 def create_stock_out(data: schemas.StockOutCreate, db: Session = Depends(get_db), user=Depends(require_roles("operator", "manager", "admin"))):
-    contract = db.get(models.Contract, data.contract_id)
+    contract = db.scalar(select(models.Contract).where(models.Contract.contract_code == data.contract_code))
     if not contract:
-        raise HTTPException(status_code=404, detail="Shartnoma topilmadi")
+        raise HTTPException(status_code=404, detail="Shartnoma kodi topilmadi")
     if contract.status != "approved":
         raise HTTPException(status_code=409, detail="Chiqim uchun shartnoma avval tasdiqlangan bo'lishi kerak")
     item = models.StockOut(contract_id=contract.id, amount=data.amount, status="pending", created_by=user.id)
@@ -563,9 +563,9 @@ def review_stock_out(item_id: int, data: schemas.RecordReview, db: Session = Dep
 # Fakturalar
 @app.post("/invoices")
 def create_invoice(data: schemas.InvoiceCreate, db: Session = Depends(get_db), user=Depends(require_roles("operator", "manager", "admin"))):
-    contract = db.get(models.Contract, data.contract_id)
+    contract = db.scalar(select(models.Contract).where(models.Contract.contract_code == data.contract_code))
     if not contract:
-        raise HTTPException(status_code=404, detail="Shartnoma topilmadi")
+        raise HTTPException(status_code=404, detail="Shartnoma kodi topilmadi")
     if contract.status != "approved":
         raise HTTPException(status_code=409, detail="Faktura uchun shartnoma avval tasdiqlangan bo'lishi kerak")
     invoice = models.Invoice(contract_id=contract.id, supplier=data.supplier, amount=data.amount, status="pending", created_by=user.id)
