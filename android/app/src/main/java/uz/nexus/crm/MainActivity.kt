@@ -746,6 +746,7 @@ fun ContractRows(raw: String, session: Session, changed: () -> Unit, onOpenStock
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var signingId by remember { mutableIntStateOf(0) }
+    var showSignatureDialog by remember { mutableStateOf(false) }
     var signingStatus by remember { mutableStateOf("approved") }
     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (arr.length() == 0) item { MessageCard("Hozircha shartnomalar yo‘q.") }
@@ -763,8 +764,8 @@ fun ContractRows(raw: String, session: Session, changed: () -> Unit, onOpenStock
                     Text("Status: " + when(status) { "approved" -> "Shartnoma tasdiqlangan"; "rejected" -> "Rad etilgan"; else -> "Tasdiqlash kutilmoqda" }, color = if(status=="approved") Green else Color(0xFF9A6700), fontWeight = FontWeight.SemiBold)
                     if(status=="pending" && (session.role=="manager" || session.role=="admin")) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(onClick={ signingId = id; signingStatus = "approved" }, colors=ButtonDefaults.buttonColors(containerColor=Green)) { Text("✍ Imzo + tasdiqlash") }
-                            OutlinedButton(onClick={ signingId = id; signingStatus = "rejected" }) { Text("Imzo + rad etish") }
+                            Button(onClick={ signingId = id; signingStatus = "approved"; showSignatureDialog = true }, colors=ButtonDefaults.buttonColors(containerColor=Green)) { Text("✍ Imzo + tasdiqlash") }
+                            OutlinedButton(onClick={ signingId = id; signingStatus = "rejected"; showSignatureDialog = true }) { Text("Imzo + rad etish") }
                         }
                     }
                     if (status == "approved") {
@@ -779,13 +780,14 @@ fun ContractRows(raw: String, session: Session, changed: () -> Unit, onOpenStock
             }
         }
     }
-    if (signingId > 0) {
+    if (showSignatureDialog) {
         SignatureDialog(
             title = "Shartnoma bo‘yicha imzo",
-            onDismiss = { signingId = 0 },
+            onDismiss = { showSignatureDialog = false; signingId = 0 },
             onConfirm = { signature ->
                 val id = signingId
                 val status = signingStatus
+                showSignatureDialog = false
                 signingId = 0
                 scope.launch {
                     try {
@@ -807,6 +809,7 @@ fun StockRows(raw: String, session: Session, changed: () -> Unit, onOpenInvoice:
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var signingId by remember { mutableIntStateOf(0) }
+    var showSignatureDialog by remember { mutableStateOf(false) }
     var signingStatus by remember { mutableStateOf("approved") }
     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if(arr.length()==0) item { MessageCard("Hozircha chiqim tovarlar yo‘q.") }
@@ -821,8 +824,8 @@ fun StockRows(raw: String, session: Session, changed: () -> Unit, onOpenInvoice:
                     Text("Status: " + if(status=="approved") "Tasdiqlangan" else if(status=="rejected") "Rad etilgan" else "Tasdiqlash kutilmoqda", color=if(status=="approved") Green else Color(0xFF9A6700), fontWeight=FontWeight.SemiBold)
                     if(status=="pending" && (session.role=="manager" || session.role=="admin")) {
                         Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                            Button(onClick={ signingId = id; signingStatus = "approved" },colors=ButtonDefaults.buttonColors(containerColor=Green)){Text("✍ Imzo + tasdiqlash")}
-                            OutlinedButton(onClick={ signingId = id; signingStatus = "rejected" }){Text("Imzo + rad etish")}
+                            Button(onClick={ signingId = id; signingStatus = "approved"; showSignatureDialog = true },colors=ButtonDefaults.buttonColors(containerColor=Green)){Text("✍ Imzo + tasdiqlash")}
+                            OutlinedButton(onClick={ signingId = id; signingStatus = "rejected"; showSignatureDialog = true }){Text("Imzo + rad etish")}
                         }
                     }
                     if (status == "approved") {
@@ -838,13 +841,14 @@ fun StockRows(raw: String, session: Session, changed: () -> Unit, onOpenInvoice:
             }
         }
     }
-    if (signingId > 0) {
+    if (showSignatureDialog) {
         SignatureDialog(
             title = "Chiqim bo‘yicha imzo",
-            onDismiss = { signingId = 0 },
+            onDismiss = { showSignatureDialog = false; signingId = 0 },
             onConfirm = { signature ->
                 val id = signingId
                 val status = signingStatus
+                showSignatureDialog = false
                 signingId = 0
                 scope.launch {
                     try {
@@ -866,6 +870,7 @@ fun InvoiceRows(raw: String, session: Session, changed: () -> Unit) {
     val context = LocalContext.current
     val scope=rememberCoroutineScope()
     var signingId by remember { mutableIntStateOf(0) }
+    var showSignatureDialog by remember { mutableStateOf(false) }
     var signingStatus by remember { mutableStateOf("approved") }
     LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp)) {
         if(arr.length()==0) item { MessageCard("Hozircha fakturalar yo‘q.") }
@@ -880,8 +885,8 @@ fun InvoiceRows(raw: String, session: Session, changed: () -> Unit) {
                     Text("Status: " + if(status=="approved") "Faktura tasdiqlandi" else if(status=="rejected") "Rad etildi" else "Tasdiqlash kutilmoqda",color=if(status=="approved") Green else Color(0xFF9A6700),fontWeight=FontWeight.SemiBold)
                     if(status=="pending" && (session.role=="manager" || session.role=="admin")) {
                         Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                            Button(onClick={ signingId = id; signingStatus = "approved" },colors=ButtonDefaults.buttonColors(containerColor=Green)){Text("✍ Imzo + tasdiqlash")}
-                            OutlinedButton(onClick={ signingId = id; signingStatus = "rejected" }){Text("Imzo + rad etish")}
+                            Button(onClick={ signingId = id; signingStatus = "approved"; showSignatureDialog = true },colors=ButtonDefaults.buttonColors(containerColor=Green)){Text("✍ Imzo + tasdiqlash")}
+                            OutlinedButton(onClick={ signingId = id; signingStatus = "rejected"; showSignatureDialog = true }){Text("Imzo + rad etish")}
                         }
                     }
                     if (o.text("signature_data").isNotBlank()) Text("✍ Imzo saqlangan", color = Green, fontSize = 12.sp)
@@ -889,13 +894,14 @@ fun InvoiceRows(raw: String, session: Session, changed: () -> Unit) {
             }
         }
     }
-    if (signingId > 0) {
+    if (showSignatureDialog) {
         SignatureDialog(
             title = "Faktura bo‘yicha imzo",
-            onDismiss = { signingId = 0 },
+            onDismiss = { showSignatureDialog = false; signingId = 0 },
             onConfirm = { signature ->
                 val id = signingId
                 val status = signingStatus
+                showSignatureDialog = false
                 signingId = 0
                 scope.launch {
                     try {
