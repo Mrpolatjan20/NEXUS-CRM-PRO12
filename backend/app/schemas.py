@@ -42,6 +42,7 @@ class CustomerCreate(BaseModel):
     pinfl: str | None = Field(default=None, pattern=r"^\d{14}$")
     phone: str = Field(min_length=7, max_length=30)
     address: str | None = None
+    photo_data: str | None = Field(default=None, max_length=200000)
 
 
 class CustomerOut(BaseModel):
@@ -52,6 +53,7 @@ class CustomerOut(BaseModel):
     pinfl: str | None
     phone: str
     address: str | None
+    photo_data: str | None = None
     created_by: int
 
     model_config = ConfigDict(from_attributes=True)
