@@ -233,6 +233,65 @@ fun LoginScreen(onLogin: (Session) -> Unit) {
         } catch (_: Exception) { false }
     }
 
+    LaunchedEffect(hasSavedLogin) {
+        if (hasSavedLogin) {
+            kotlinx.coroutines.delay(500)
+            val savedToken = try {
+                secureSessionPrefs(context).getString("access_token", null)
+            } catch (_: Exception) { null }
+            val activity = context as? FragmentActivity
+            if (!savedToken.isNullOrBlank() && activity != null) {
+                val manager = BiometricManager.from(context)
+                val availability = manager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_WEAK)
+                if (availability == BiometricManager.BIOMETRIC_SUCCESS) {
+                    val prompt = BiometricPrompt(
+                        activity,
+                        ContextCompat.getMainExecutor(context),
+                        object : BiometricPrompt.AuthenticationCallback() {
+                            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                                super.onAuthenticationSucceeded(result)
+                                scope.launch {
+                                    loading = true
+                                    try {
+                                        val me = JSONObject(api("GET", "/me", savedToken))
+                                        onLogin(Session(savedToken, me.text("username"), me.text("full_name"), me.text("role")))
+                                    } catch (e: Exception) {
+                                        error = e.message ?: "Saqlangan sessiya muddati tugagan. Login-parol bilan qayta kiring."
+                                        try { secureSessionPrefs(context).edit().clear().apply() } catch (_: Exception) {}
+                                        hasSavedLogin = false
+                                    } finally { loading = false }
+                                }
+                            }
+
+                            override fun onAuthenticationError(code: Int, errString: CharSequence) {
+                                super.onAuthenticationError(code, errString)
+                                error = errString.toString()
+                            }
+
+                            override fun onAuthenticationFailed() {
+                                super.onAuthenticationFailed()
+                                error = "Biometrik tasdiqlash amalga oshmadi. Qayta urinib ko‘ring."
+                            }
+                        }
+                    )
+                    val info = BiometricPrompt.PromptInfo.Builder()
+                        .setTitle("NEXUS CRM")
+                        .setSubtitle("Telefoningizda ro‘yxatdan o‘tgan yuz yoki biometrik usul bilan tasdiqlang")
+                        .setNegativeButtonText("Parol bilan kirish")
+                        .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_WEAK)
+                        .build()
+                    prompt.authenticate(info)
+                } else {
+                    error = when (availability) {
+                        BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED -> "Telefon sozlamalarida yuz yoki barmoq izini ro‘yxatdan o‘tkazing."
+                        BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE -> "Telefon ilovalar uchun biometrik kirishni qo‘llab-quvvatlamaydi."
+                        else -> "Biometrik kirish hozircha mavjud emas. Login-parol bilan kiring."
+                    }
+                }
+            }
+        }
+    }
+
     Surface(Modifier.fillMaxSize(), color = LightGreen) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(
