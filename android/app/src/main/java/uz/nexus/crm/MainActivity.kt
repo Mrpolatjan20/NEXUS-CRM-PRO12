@@ -464,7 +464,7 @@ fun ApiPage(session: Session, page: String, back: () -> Unit) {
                 save = { _, contractId, amount, _ ->
                     scope.launch {
                         try {
-                            api("POST", "/stock-outs", session.token, JSONObject().put("contract_id", contractId).put("amount", amount.toDouble()))
+                            api("POST", "/stock-outs", session.token, JSONObject().put("contract_code", contractId.toString()).put("amount", amount.toDouble()))
                             dialog = false
                             refresh++
                         } catch (e: Exception) { error = e.message ?: "Chiqim saqlanmadi"; dialog = false }
@@ -477,7 +477,7 @@ fun ApiPage(session: Session, page: String, back: () -> Unit) {
                 save = { _, contractId, amount, supplier ->
                     scope.launch {
                         try {
-                            api("POST", "/invoices", session.token, JSONObject().put("contract_id", contractId).put("amount", amount.toDouble()).put("supplier", supplier))
+                            api("POST", "/invoices", session.token, JSONObject().put("contract_code", contractId.toString()).put("amount", amount.toDouble()).put("supplier", supplier))
                             dialog = false
                             refresh++
                         } catch (e: Exception) { error = e.message ?: "Faktura saqlanmadi"; dialog = false }
@@ -541,7 +541,7 @@ fun ContractRows(raw: String, session: Session, changed: () -> Unit) {
                     Text("Mijozning F.I.O si:", color = Color.Gray, fontSize = 12.sp)
                     Text(o.text("customer_name"), color = Green, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(5.dp))
-                    Text("Shartnoma kodi: " + o.text("contract_code"))
+                    Text("Shartnoma kodi: " + o.text("contract_code") + "  •  ID: #" + o.optInt("id"))
                     Text("Sanasi: " + o.text("created_at").take(10))
                     Text("Status: " + when(status) { "approved" -> "Shartnoma tasdiqlangan"; "rejected" -> "Rad etilgan"; else -> "Tasdiqlash kutilmoqda" }, color = if(status=="approved") Green else Color(0xFF9A6700), fontWeight = FontWeight.SemiBold)
                     if(status=="pending" && (session.role=="manager" || session.role=="admin")) {
@@ -627,7 +627,7 @@ fun BusinessRecordForm(kind: String, close: () -> Unit, save: (Int, Int, String,
             Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
                 if(isContract) OutlinedTextField(customerId,{customerId=it.filter(Char::isDigit)},label={Text("Mijoz ID raqami")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true)
                 else {
-                    OutlinedTextField(contractId,{contractId=it.filter(Char::isDigit)},label={Text("Shartnoma ID raqami")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true)
+                    OutlinedTextField(contractId,{contractId=it.filter(Char::isDigit)},label={Text("Shartnoma kodi (masalan 1000690587)")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true)
                     OutlinedTextField(amount,{amount=it.filter{ch->ch.isDigit()||ch=='.'}},label={Text("Summa (UZS)")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true)
                     if(!isStock) OutlinedTextField(supplier,{supplier=it},label={Text("Ta’minotchi nomi")},singleLine=true)
                 }
