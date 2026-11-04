@@ -597,3 +597,131 @@ def review_invoice(invoice_id: int, data: schemas.RecordReview, db: Session = De
     db.commit()
     return {"id": invoice.id, "status": invoice.status}
 
+
+
+# Moliyalashtirish arizalari: mustaqil jadvallar, mahsulotlar, kafillar va to'lov grafigi
+def finance_application_payload(db, application):
+    customer = db.get(models.Customer, application.customer_id)
+    products = db.scalars(select(models.FinanceProduct).where(models.FinanceProduct.application_id == application.id)).all()
+    guarantors = db.scalars(select(models.FinanceGuarantor).where(models.FinanceGuarantor.application_id == application.id)).all()
+    installments = db.scalars(select(models.FinanceInstallment).where(models.FinanceInstallment.application_id == application.id).order_by(models.FinanceInstallment.installment_no)).all()
+    return {
+        "id": application.id,
+        "customer_id": application.customer_id,
+        "customer_name": customer.full_name if customer else "",
+        "term_months": application.term_months,
+        "markup_percent": application.markup_percent,
+        "extra_percent": application.extra_percent,
+        "base_amount": application.base_amount,
+        "total_amount": application.total_amount,
+        "monthly_payment": application.monthly_payment,
+        "first_payment_date": application.first_payment_date.date().isoformat(),
+        "status": application.status,
+        "created_at": application.created_at,
+        "products": [{"id": p.id, "name": p.name, "category": p.category, "supplier": p.supplier, "unit_price": p.unit_price, "quantity": p.quantity, "line_total": p.unit_price * p.quantity} for p in products],
+        "guarantors": [{"id": g.id, "full_name": g.full_name, "phone": g.phone, "passport_number": g.passport_number} for g in guarantors],
+        "schedule": [{"number": s.installment_no, "due_date": s.due_date.date().isoformat(), "amount": s.amount, "status": s.status} for s in installments],
+    }
+
+
+@app.post("/finance-applications")
+def create_finance_application(data: schemas.FinanceApplicationCreate, db: Session = Depends(get_db), user=Depends(require_roles("operator", "manager", "admin"))):
+    customer = db.get(models.Customer, data.customer_id)
+    if not customer:
+        raise HTTPException(status_code=404, detail="Mijoz topilmadi")
+
+    base_amount = round(sum(float(p.unit_price) * p.quantity for p in data.products))
+    # 50% ustama + qo'shimcha 5% = boshlang'ich narxning 1.575 baravari
+    total_amount = round(base_amount * 1.575)
+    if base_amount <= 0 or total_amount <= 0:
+        raise HTTPException(status_code=400, detail="Tovar summasini tekshiring")
+
+    today = datetime.now(timezone.utc).date()
+    if today.month == 12:
+        first_due = today.replace(year=today.year + 1, month=1, day=1)
+    else:
+        first_due = today.replace(month=today.month + 1, day=1)
+
+    app_row = models.FinanceApplication(
+        customer_id=customer.id,
+        term_months=data.term_months,
+        markup_percent=50.0,
+        extra_percent=5.0,
+        base_amount=base_amount,
+        total_amount=total_amount,
+        monthly_payment=round(total_amount / data.term_months, 2),
+        first_payment_date=datetime.combine(first_due, datetime.min.time()),
+        status="pending",
+        created_by=user.id,
+    )
+    db.add(app_row)
+    db.flush()
+
+    for product in data.products:
+        db.add(models.FinanceProduct(
+            application_id=app_row.id,
+            name=product.name,
+            category=product.category,
+            supplier=product.supplier,
+            unit_price=product.unit_price,
+            quantity=product.quantity,
+        ))
+
+    for guarantor in data.guarantors:
+        db.add(models.FinanceGuarantor(
+            application_id=app_row.id,
+            full_name=guarantor.full_name,
+            phone=guarantor.phone,
+            passport_number=guarantor.passport_number,
+        ))
+
+    # To'lovlardagi qoldiq birinchi oylarga taqsimlanadi, jami aniq teng bo'ladi.
+    base_installment = total_amount // data.term_months
+    remainder = total_amount % data.term_months
+    for index in range(data.term_months):
+        due_year = first_due.year + (first_due.month - 1 + index) // 12
+        due_month = (first_due.month - 1 + index) % 12 + 1
+        due_date = first_due.replace(year=due_year, month=due_month, day=1)
+        amount = base_installment + (1 if index < remainder else 0)
+        db.add(models.FinanceInstallment(
+            application_id=app_row.id,
+            installment_no=index + 1,
+            due_date=datetime.combine(due_date, datetime.min.time()),
+            amount=amount,
+            status="unpaid",
+        ))
+
+    add_audit(db, user.id, "finance_application_created", f"Ariza ID: {app_row.id}; mijoz: {customer.full_name}; jami: {total_amount}; muddat: {data.term_months} oy")
+    db.commit()
+    db.refresh(app_row)
+    return finance_application_payload(db, app_row)
+
+
+@app.get("/finance-applications")
+def list_finance_applications(db: Session = Depends(get_db), user=Depends(require_roles("operator", "manager", "admin"))):
+    rows = db.scalars(select(models.FinanceApplication).order_by(models.FinanceApplication.id.desc())).all()
+    return [finance_application_payload(db, row) for row in rows]
+
+
+@app.get("/finance-applications/{application_id}")
+def get_finance_application(application_id: int, db: Session = Depends(get_db), user=Depends(require_roles("operator", "manager", "admin"))):
+    row = db.get(models.FinanceApplication, application_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Moliyalashtirish arizasi topilmadi")
+    return finance_application_payload(db, row)
+
+
+@app.patch("/finance-applications/{application_id}/review")
+def review_finance_application(application_id: int, data: schemas.FinanceApplicationReview, db: Session = Depends(get_db), manager=Depends(require_roles("manager", "admin"))):
+    row = db.get(models.FinanceApplication, application_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Moliyalashtirish arizasi topilmadi")
+    if row.status != "pending":
+        raise HTTPException(status_code=409, detail="Ariza avval ko'rib chiqilgan")
+    row.status = data.status
+    row.reviewed_by = manager.id
+    row.reviewed_at = datetime.now(timezone.utc)
+    add_audit(db, manager.id, "finance_application_reviewed", f"Ariza ID: {row.id}; status: {data.status}; izoh: {data.comment or ''}")
+    db.commit()
+    db.refresh(row)
+    return finance_application_payload(db, row)
