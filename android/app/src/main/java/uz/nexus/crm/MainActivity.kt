@@ -43,6 +43,29 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 
+private fun normalizePassportSeries(value: String): String =
+    value.uppercase()
+        .map { ch ->
+            when (ch) {
+                'А' -> 'A'
+                'В' -> 'B'
+                'Е' -> 'E'
+                'К' -> 'K'
+                'М' -> 'M'
+                'Н' -> 'H'
+                'О' -> 'O'
+                'Р' -> 'P'
+                'С' -> 'C'
+                'Т' -> 'T'
+                'Х' -> 'X'
+                'У' -> 'Y'
+                else -> ch
+            }
+        }
+        .filter { it in 'A'..'Z' }
+        .take(2)
+        .joinToString("")
+
 private val Green = Color(0xFF0754C7)
 private val LightGreen = Color(0xFFF1F6FF)
 private const val API_URL = "https://nexus-crm-backend-g8or.onrender.com"
@@ -666,7 +689,7 @@ fun CustomerForm(close: () -> Unit, save: (String, String, String, String, Strin
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 OutlinedTextField(
                                     passportSeries,
-                                    { passportSeries = it.uppercase().filter(Char::isLetter).take(2) },
+                                    { passportSeries = normalizePassportSeries(it) },
                                     label = { Text("Seriya") }, placeholder = { Text("AA") },
                                     singleLine = true, modifier = Modifier.weight(0.8f), shape = RoundedCornerShape(13.dp)
                                 )
@@ -702,13 +725,23 @@ fun CustomerForm(close: () -> Unit, save: (String, String, String, String, Strin
                     Button(
                         onClick = {
                             val dateOk = birthDate.isBlank() || Regex("^\\d{2}\\.\\d{2}\\.\\d{4}$").matches(birthDate)
-                            val passportOk = (passportSeries.isBlank() && passportNumber.isBlank()) ||
-                                (passportSeries.matches(Regex("^[A-Z]{2}$")) && passportNumber.matches(Regex("^\\d{7}$")))
+                            val normalizedSeries = normalizePassportSeries(passportSeries)
+                            val passportOk = (normalizedSeries.isBlank() && passportNumber.isBlank()) ||
+                                (normalizedSeries.matches(Regex("^[A-Z]{2}$")) && passportNumber.matches(Regex("^\\d{7}$")))
                             val pinflOk = pinfl.isBlank() || pinfl.matches(Regex("^\\d{14}$"))
-                            if (name.trim().length >= 2 && phone.trim().length >= 7 && dateOk && passportOk && pinflOk) {
-                                save(name.trim(), phone.trim(), address.trim(), birthDate, passportSeries, passportNumber, pinfl, photoData)
+                            val nameOk = name.trim().length >= 2
+                            val phoneOk = phone.filter(Char::isDigit).length >= 7
+                            if (nameOk && phoneOk && dateOk && passportOk && pinflOk) {
+                                save(name.trim(), phone.trim(), address.trim(), birthDate, normalizedSeries, passportNumber, pinfl, photoData)
                             } else {
-                                cameraError = "Ma’lumotlarni tekshiring. Pasport seriyasi, raqami va JSHSHIR formatiga e’tibor bering."
+                                cameraError = when {
+                                    !nameOk -> "F.I.Sh. kamida 2 ta belgidan iborat bo‘lsin."
+                                    !phoneOk -> "Telefon raqamini to‘liq kiriting."
+                                    !dateOk -> "Tug‘ilgan sana KK.OO.YYYY formatida bo‘lishi kerak."
+                                    !passportOk -> "Pasport seriyasi 2 ta harf, raqami 7 ta raqam bo‘lishi kerak."
+                                    !pinflOk -> "JSHSHIR aynan 14 ta raqamdan iborat bo‘lishi kerak."
+                                    else -> "Ma’lumotlarni tekshiring."
+                                }
                             }
                         },
                         modifier = Modifier.fillMaxWidth().height(54.dp),
