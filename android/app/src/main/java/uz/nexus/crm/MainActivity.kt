@@ -749,7 +749,11 @@ fun HomePage(open: (String) -> Unit) {
 @Composable
 fun ApiPage(session: Session, page: String, back: () -> Unit, selectedContractCode: String = "", onOpenStock: (String) -> Unit = {}, onOpenInvoice: (String, String) -> Unit = { _, _ -> }, selectedStockAmount: String = "", onContractCreated: () -> Unit = {}) {
     val title = when (page) {
-        "workflow" -> "So‘rovnoma"
+        "workflow", "customers" -> "So‘rovnoma • 1/4 Mijoz"
+        "contracts" -> "So‘rovnoma • 2/4 Shartnoma"
+        "stock" -> "So‘rovnoma • 3/4 Chiqim"
+        "invoices" -> "So‘rovnoma • 4/4 Faktura"
+        "search" -> "Mijoz qidirish"
         "applications" -> "Moliyalashtirish arizalari"
         "employees" -> "Xodimlar"
         "reports" -> "Hisobotlar"
