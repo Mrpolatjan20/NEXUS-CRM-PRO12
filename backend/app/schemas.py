@@ -133,3 +133,12 @@ class FinanceApplicationCreate(BaseModel):
 class FinanceApplicationReview(BaseModel):
     status: Literal["approved", "rejected"]
     comment: str | None = None
+
+
+class UserAdminUpdate(BaseModel):
+    full_name: str | None = Field(default=None, min_length=2, max_length=150)
+    username: str | None = Field(default=None, min_length=3, max_length=80)
+    role: Role | None = None
+
+class UserPasswordUpdate(BaseModel):
+    new_password: str = Field(min_length=8, max_length=72)
