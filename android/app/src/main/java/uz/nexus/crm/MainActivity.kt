@@ -247,8 +247,7 @@ fun LoginScreen(onLogin: (Session) -> Unit) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
                     Box(Modifier.size(76.dp).background(Green, RoundedCornerShape(22.dp)), contentAlignment = Alignment.Center) {
                         Text("M", color = Color.White, fontSize = 48.sp, fontWeight = FontWeight.Black)
-                    }
-                    Spacer(Modifier.width(12.dp))
+                    }                    Spacer(Modifier.width(12.dp))
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text("Mrpolatjan", color = PrimaryText, fontSize = 31.sp, fontWeight = FontWeight.ExtraBold)
                         Text("CRM", color = Green, fontSize = 19.sp, fontWeight = FontWeight.Bold)
@@ -497,8 +496,7 @@ fun FaceLoginSettingsPage(
     var status by remember { mutableStateOf(message) }
     var enrolled by remember { mutableStateOf(FaceTemplateStore.exists(context)) }
 
-    Column(
-        Modifier.fillMaxSize().padding(18.dp),
+    Column(        Modifier.fillMaxSize().padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         Text("‹ Orqaga", color = Green, fontWeight = FontWeight.Bold,
@@ -746,7 +744,6 @@ fun HomePage(open: (String) -> Unit) {
         }
     }
 }
-
 
 @Composable
 fun SorovnomaPage(session: Session, back: () -> Unit) {
@@ -997,8 +994,7 @@ fun ApiPage(session: Session, page: String, back: () -> Unit, selectedContractCo
                     ContractRows(raw, session, { refresh++ }, onOpenStock)
                 }
                 "stock" -> {
-                    ActionButton("＋ Chiqim tovar kiritish") { dialog = true }
-                    StockRows(raw, session, { refresh++ }, onOpenInvoice)
+                    ActionButton("＋ Chiqim tovar kiritish") { dialog = true }                    StockRows(raw, session, { refresh++ }, onOpenInvoice)
                 }
                 "invoices" -> {
                     ActionButton("＋ Faktura kiritish") { dialog = true }
@@ -1247,8 +1243,7 @@ fun StockRows(raw: String, session: Session, changed: () -> Unit, onOpenInvoice:
             onDismiss = { showSignatureDialog = false; signingId = 0 },
             onConfirm = { signature ->
                 val id = signingId
-                val status = signingStatus
-                showSignatureDialog = false
+                val status = signingStatus                showSignatureDialog = false
                 signingId = 0
                 scope.launch {
                     try {
@@ -1497,8 +1492,7 @@ fun CustomerRows(raw: String, onCreateContract: (Int) -> Unit = {}) {
             Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = CardSurface)) {
                 Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (photo.isNotBlank()) {
-                        val bitmap = remember(photo) {
-                            try {
+                        val bitmap = remember(photo) {                            try {
                                 val bytes = Base64.decode(photo, Base64.DEFAULT)
                                 android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
                             } catch (_: Exception) { null }
@@ -1747,8 +1741,7 @@ fun ApplicationRows(raw: String, session: Session, changed: () -> Unit) {
                         }
                     }
                 }
-            }
-        }
+            }        }
     }
 }
 
@@ -1997,8 +1990,7 @@ fun CustomerForm(close: () -> Unit, save: (String, String, String, String, Strin
                                     passportSeries,
                                     { passportSeries = normalizePassportSeries(it) },
                                     label = { Text("Seriya") }, placeholder = { Text("AA") },
-                                    singleLine = true, modifier = Modifier.weight(0.8f), shape = RoundedCornerShape(13.dp)
-                                )
+                                    singleLine = true, modifier = Modifier.weight(0.8f), shape = RoundedCornerShape(13.dp)                                )
                                 OutlinedTextField(
                                     passportNumber,
                                     { passportNumber = it.filter(Char::isDigit).take(7) },
@@ -2105,8 +2097,11 @@ fun CameraCaptureScreen(
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
-    var livenessMessage by remember { mutableStateOf("Kameraga qarab, ko‘zingizni ochiq tuting") }
+    var livenessMessage by remember { mutableStateOf("Yuzingizni doira ichiga joylashtiring") }
     var livenessPassed by remember { mutableStateOf(!requireLiveness) }
+    var captureStarted by remember { mutableStateOf(false) }
+    var captureError by remember { mutableStateOf("") }
+    val analysisExecutor = remember { java.util.concurrent.Executors.newSingleThreadExecutor() }
     val controller = remember(requireLiveness) {
         androidx.camera.view.LifecycleCameraController(context).apply {
             cameraSelector = androidx.camera.core.CameraSelector.DEFAULT_FRONT_CAMERA
@@ -2114,26 +2109,65 @@ fun CameraCaptureScreen(
                 androidx.camera.view.CameraController.IMAGE_CAPTURE or
                     (if (requireLiveness) androidx.camera.view.CameraController.IMAGE_ANALYSIS else 0)
             )
+            if (requireLiveness) {
+                setImageAnalysisBackpressureStrategy(androidx.camera.core.ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+            }
         }
     }
     val livenessAnalyzer = remember(requireLiveness) {
         if (requireLiveness) FaceLivenessAnalyzer(
             onProgress = { livenessMessage = it },
-            onPassed = { livenessPassed = true }
+            onPassed = {
+                livenessMessage = "Yuz aniqlandi. Surat avtomatik olinmoqda…"
+                livenessPassed = true
+            }
         ) else null
     }
-    DisposableEffect(lifecycleOwner, controller, livenessAnalyzer) {
+    val capturePhoto = {
+        if (!captureStarted) {
+            captureStarted = true
+            captureError = ""
+            val photoFile = java.io.File(context.cacheDir, "face_login_${System.currentTimeMillis()}.jpg")
+            val outputOptions = androidx.camera.core.ImageCapture.OutputFileOptions.Builder(photoFile).build()
+            controller.takePicture(
+                outputOptions,
+                androidx.core.content.ContextCompat.getMainExecutor(context),
+                object : androidx.camera.core.ImageCapture.OnImageSavedCallback {
+                    override fun onImageSaved(result: androidx.camera.core.ImageCapture.OutputFileResults) {
+                        val bitmap = android.graphics.BitmapFactory.decodeFile(photoFile.absolutePath)
+                        photoFile.delete()
+                        if (bitmap != null) onCaptured(bitmap)
+                        else {
+                            captureStarted = false
+                            captureError = "Suratni o‘qib bo‘lmadi. Qayta urinib ko‘ring."
+                        }
+                    }
+                    override fun onError(exception: androidx.camera.core.ImageCaptureException) {
+                        photoFile.delete()
+                        android.util.Log.e("MrpolatjanCRM", "Camera capture failed", exception)
+                        captureStarted = false
+                        captureError = "Kamera xatosi. Yuzingizni qayta joylashtiring."
+                    }
+                }
+            )
+        }
+    }
+    DisposableEffect(lifecycleOwner, controller, livenessAnalyzer, analysisExecutor) {
         controller.bindToLifecycle(lifecycleOwner)
         if (livenessAnalyzer != null) {
-            controller.setImageAnalysisAnalyzer(
-                androidx.core.content.ContextCompat.getMainExecutor(context),
-                livenessAnalyzer
-            )
+            controller.setImageAnalysisAnalyzer(analysisExecutor, livenessAnalyzer)
         }
         onDispose {
             controller.clearImageAnalysisAnalyzer()
             controller.unbind()
             livenessAnalyzer?.close()
+            analysisExecutor.shutdown()
+        }
+    }
+    LaunchedEffect(livenessPassed, requireLiveness) {
+        if (requireLiveness && livenessPassed && !captureStarted) {
+            kotlinx.coroutines.delay(250)
+            capturePhoto()
         }
     }
     Box(Modifier.fillMaxSize().background(Color(0xFF18243D))) {
@@ -2154,7 +2188,7 @@ fun CameraCaptureScreen(
                 Text("‹", color = Color.White, fontSize = 34.sp, modifier = Modifier.clickable { onClose() })
                 Spacer(Modifier.width(18.dp))
                 Text(
-                    if (requireLiveness) "Jonlilik tekshiruvi" else "Rasmni tanlang",
+                    if (requireLiveness) "Yuz orqali kirish" else "Rasmni tanlang",
                     color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.SemiBold
                 )
             }
@@ -2169,39 +2203,28 @@ fun CameraCaptureScreen(
                 if (requireLiveness) livenessMessage else "Yuzingizni doira ichiga joylashtiring",
                 color = Color.White, fontSize = 14.sp, modifier = Modifier.padding(horizontal = 22.dp, vertical = 24.dp)
             )
+            if (captureError.isNotBlank()) {
+                Text(captureError, color = Color(0xFFFFB4AB), fontSize = 12.sp, modifier = Modifier.padding(horizontal = 20.dp))
+            }
             Spacer(Modifier.weight(1f))
-            Box(
-                Modifier.padding(bottom = 42.dp).size(82.dp)
-                    .border(5.dp, Color.White, androidx.compose.foundation.shape.CircleShape)
-                    .padding(7.dp)
-                    .background(
-                        if (!requireLiveness || livenessPassed) Green else Color.DarkGray,
-                        androidx.compose.foundation.shape.CircleShape
-                    )
-                    .clickable(enabled = !requireLiveness || livenessPassed) {
-                        val photoFile = java.io.File(context.cacheDir, "client_${System.currentTimeMillis()}.jpg")
-                        val outputOptions = androidx.camera.core.ImageCapture.OutputFileOptions.Builder(photoFile).build()
-                        controller.takePicture(
-                            outputOptions,
-                            androidx.core.content.ContextCompat.getMainExecutor(context),
-                            object : androidx.camera.core.ImageCapture.OnImageSavedCallback {
-                                override fun onImageSaved(result: androidx.camera.core.ImageCapture.OutputFileResults) {
-                                    val bitmap = android.graphics.BitmapFactory.decodeFile(photoFile.absolutePath)
-                                    photoFile.delete()
-                                    if (bitmap != null) onCaptured(bitmap)
-                                }
-                                override fun onError(exception: androidx.camera.core.ImageCaptureException) {
-                                    photoFile.delete()
-                                    android.util.Log.e("MrpolatjanCRM", "Camera capture failed", exception)
-                                }
-                            }
-                        )
-                    }
-            )
+            if (!requireLiveness) {
+                Box(
+                    Modifier.padding(bottom = 42.dp).size(82.dp)
+                        .border(5.dp, Color.White, androidx.compose.foundation.shape.CircleShape)
+                        .padding(7.dp)
+                        .background(Green, androidx.compose.foundation.shape.CircleShape)
+                        .clickable { capturePhoto() }
+                )
+            } else if (captureStarted) {
+                CircularProgressIndicator(
+                    Modifier.padding(bottom = 42.dp).size(48.dp),
+                    color = Color.White,
+                    strokeWidth = 4.dp
+                )
+            }
         }
     }
 }
-
 @Composable
 fun ApplicationForm(close: () -> Unit, save: (Int, String, String) -> Unit) {
     var customerId by remember { mutableStateOf("") }
@@ -2247,5 +2270,4 @@ fun EmployeeForm(close: () -> Unit, save: (String, String, String, String) -> Un
         },
         confirmButton = { TextButton(onClick = { if (name.trim().length >= 2 && login.trim().length >= 3 && password.length >= 8) save(name.trim(), login.trim(), password, role) }) { Text("Saqlash") } },
         dismissButton = { TextButton(onClick = close) { Text("Bekor qilish") } }
-    )
-}
+    )}
