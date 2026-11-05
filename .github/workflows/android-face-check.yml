@@ -61,7 +61,24 @@ jobs:
                       idx = int(graph.Outputs(i))
                       tensor = graph.Tensors(idx)
                       print("  index=", idx, "name=", tensor.Name(), "type=", tensor.Type(), "shape=", tensor.ShapeAsNumpy().tolist())
-          print("\\nDIAGNOSTIKA TUGADI. Tensor ma'lumotlariga qarab keyingi bosqich moslanadi.")
+          for path in files:
+              data = open(path, "rb").read()
+              model = tflite.Model.GetRootAsModel(data, 0)
+              graph = model.Subgraphs(0)
+              ins = [graph.Tensors(int(graph.Inputs(i))) for i in range(graph.InputsLength())]
+              outs = [graph.Tensors(int(graph.Outputs(i))) for i in range(graph.OutputsLength())]
+              valid = (len(ins) == 2 and len(outs) == 1
+                       and all(t.Type() == tflite.TensorType.FLOAT32 and t.ShapeAsNumpy().tolist() == [1,3,112,112] for t in ins)
+                       and outs[0].Type() == tflite.TensorType.FLOAT32
+                       and outs[0].ShapeAsNumpy().tolist() == [2,128])
+              if valid:
+                  import shutil
+                  os.makedirs("android/app/src/main/assets", exist_ok=True)
+                  shutil.copyfile(path, "android/app/src/main/assets/mobilefacenet.tflite")
+                  print("MOS MODEL TOPILDI VA ASSETS ICHIGA JOYLANDI:", path)
+                  sys.exit(0)
+          print("ERROR: Ikki kirishli FLOAT32 [1,3,112,112] va chiqishi [2,128] model topilmadi.", file=sys.stderr)
+          sys.exit(1)
           PY
 
       - name: Build debug APK
