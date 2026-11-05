@@ -1,6 +1,7 @@
 package uz.nexus.crm
 
 import android.graphics.Bitmap
+import org.tensorflow.lite.DataType
 import org.tensorflow.lite.Interpreter
 import java.io.Closeable
 import java.nio.ByteBuffer
@@ -8,12 +9,9 @@ import java.nio.ByteOrder
 import kotlin.math.sqrt
 
 /**
- * On-device MobileFaceNet embedding helper.
- *
- * Expected model contract: float32 input [1,3,112,112] (NCHW), RGB values normalized
- * to [-1,1], and float32 output [1,N]. The model file is intentionally loaded
- * lazily from assets so the app can still start while model packaging is being
- * completed.
+ * Qualcomm MobileFaceNet pair model adapter.
+ * The exported model accepts two NCHW images and returns two 128D embeddings.
+ * Supplying the same face to both branches lets this app use one embedding.
  */
 class FaceRecognitionEngine(
     private val interpreter: Interpreter
@@ -22,13 +20,11 @@ class FaceRecognitionEngine(
     companion object {
         const val MODEL_ASSET = "mobilefacenet.tflite"
         private const val INPUT_SIZE = 112
+        private const val EMBEDDING_SIZE = 128
 
         fun create(context: android.content.Context): FaceRecognitionEngine {
-            val modelBytes = context.assets.open(MODEL_ASSET).use { input ->
-                input.readBytes()
-            }
-            val modelBuffer = ByteBuffer.allocateDirect(modelBytes.size)
-                .order(ByteOrder.nativeOrder())
+            val modelBytes = context.assets.open(MODEL_ASSET).use { it.readBytes() }
+            val modelBuffer = ByteBuffer.allocateDirect(modelBytes.size).order(ByteOrder.nativeOrder())
             modelBuffer.put(modelBytes)
             modelBuffer.rewind()
             return FaceRecognitionEngine(Interpreter(modelBuffer))
@@ -36,39 +32,45 @@ class FaceRecognitionEngine(
     }
 
     fun createEmbedding(faceBitmap: Bitmap): FloatArray {
-        val inputTensor = interpreter.getInputTensor(0)
-        require(inputTensor.dataType() == org.tensorflow.lite.DataType.FLOAT32) {
-            "Yuz modeli FLOAT32 formatida bo‘lishi kerak."
+        require(interpreter.inputTensorCount == 2) {
+            "Yuz modeli ikkita kirish tasvirini kutmoqda."
         }
-        val shape = inputTensor.shape()
-        require(shape.size == 4 && shape[0] == 1 && shape[1] == 3 && shape[2] == INPUT_SIZE && shape[3] == INPUT_SIZE) {
-            "MobileFaceNet modeli [1,3,112,112] formatida bo‘lishi kerak."
+        for (i in 0 until 2) {
+            val tensor = interpreter.getInputTensor(i)
+            require(tensor.dataType() == DataType.FLOAT32 &&
+                tensor.shape().contentEquals(intArrayOf(1, 3, INPUT_SIZE, INPUT_SIZE))) {
+                "MobileFaceNet kirish formati mos emas."
+            }
         }
 
-        val resized = centerSquare(faceBitmap)
-        val scaled = Bitmap.createScaledBitmap(resized, INPUT_SIZE, INPUT_SIZE, true)
-        val input = ByteBuffer.allocateDirect(4 * INPUT_SIZE * INPUT_SIZE * 3)
-            .order(ByteOrder.nativeOrder())
+        val outputTensor = interpreter.getOutputTensor(0)
+        require(outputTensor.dataType() == DataType.FLOAT32 &&
+            outputTensor.shape().contentEquals(intArrayOf(2, EMBEDDING_SIZE))) {
+            "MobileFaceNet chiqishi [2,128] FLOAT32 bo‘lishi kerak."
+        }
+
+        val input = createInput(faceBitmap)
+        val secondInput = createInput(faceBitmap)
+        val output = Array(2) { FloatArray(EMBEDDING_SIZE) }
+        interpreter.runForMultipleInputsOutputs(
+            arrayOf(input, secondInput),
+            hashMapOf(0 to output)
+        )
+        return l2Normalize(output[0])
+    }
+
+    private fun createInput(faceBitmap: Bitmap): ByteBuffer {
+        val square = centerSquare(faceBitmap)
+        val scaled = Bitmap.createScaledBitmap(square, INPUT_SIZE, INPUT_SIZE, true)
         val pixels = IntArray(INPUT_SIZE * INPUT_SIZE)
         scaled.getPixels(pixels, 0, INPUT_SIZE, 0, 0, INPUT_SIZE, INPUT_SIZE)
-        // Qualcomm export uses NCHW: write all red, then green, then blue.
+        val input = ByteBuffer.allocateDirect(4 * INPUT_SIZE * INPUT_SIZE * 3)
+            .order(ByteOrder.nativeOrder())
         for (pixel in pixels) input.putFloat((((pixel shr 16) and 0xFF) / 127.5f) - 1f)
         for (pixel in pixels) input.putFloat((((pixel shr 8) and 0xFF) / 127.5f) - 1f)
         for (pixel in pixels) input.putFloat(((pixel and 0xFF) / 127.5f) - 1f)
         input.rewind()
-
-        val outputTensor = interpreter.getOutputTensor(0)
-        val outputShape = outputTensor.shape()
-        require(outputTensor.dataType() == org.tensorflow.lite.DataType.FLOAT32) {
-            "Yuz modeli chiqishi FLOAT32 formatida bo‘lishi kerak."
-        }
-        require(outputShape.contentEquals(intArrayOf(1, 128))) {
-            "Model chiqishi [1,128] formatida bo‘lishi kerak."
-        }
-        val outputSize = outputShape.last()
-        val output = Array(1) { FloatArray(outputSize) }
-        interpreter.run(input, output)
-        return l2Normalize(output[0])
+        return input
     }
 
     fun cosineSimilarity(first: FloatArray, second: FloatArray): Float {
