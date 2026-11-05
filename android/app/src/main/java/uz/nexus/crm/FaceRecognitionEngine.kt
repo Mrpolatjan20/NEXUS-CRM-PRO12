@@ -52,9 +52,11 @@ class FaceRecognitionEngine(
         val input = createInput(faceBitmap)
         val secondInput = createInput(faceBitmap)
         val output = Array(2) { FloatArray(EMBEDDING_SIZE) }
+        val outputMap = HashMap<Int, Any>()
+        outputMap[0] = output as Any
         interpreter.runForMultipleInputsOutputs(
             arrayOf(input, secondInput),
-            hashMapOf(0 to output)
+            outputMap
         )
         return l2Normalize(output[0])
     }
