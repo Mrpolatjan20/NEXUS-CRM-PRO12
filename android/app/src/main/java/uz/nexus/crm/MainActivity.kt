@@ -25,6 +25,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -994,7 +995,8 @@ fun ApiPage(session: Session, page: String, back: () -> Unit, selectedContractCo
                     ContractRows(raw, session, { refresh++ }, onOpenStock)
                 }
                 "stock" -> {
-                    ActionButton("＋ Chiqim tovar kiritish") { dialog = true }                    StockRows(raw, session, { refresh++ }, onOpenInvoice)
+                    ActionButton("＋ Chiqim tovar kiritish") { dialog = true }
+                    StockRows(raw, session, { refresh++ }, onOpenInvoice)
                 }
                 "invoices" -> {
                     ActionButton("＋ Faktura kiritish") { dialog = true }
@@ -1243,7 +1245,8 @@ fun StockRows(raw: String, session: Session, changed: () -> Unit, onOpenInvoice:
             onDismiss = { showSignatureDialog = false; signingId = 0 },
             onConfirm = { signature ->
                 val id = signingId
-                val status = signingStatus                showSignatureDialog = false
+                val status = signingStatus
+                showSignatureDialog = false
                 signingId = 0
                 scope.launch {
                     try {
